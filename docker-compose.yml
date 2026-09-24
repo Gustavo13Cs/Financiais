@@ -1,0 +1,37 @@
+services:
+  # Next.js Web App
+  web:
+    build:
+      context: ./financiais-app
+      dockerfile: Dockerfile
+    container_name: financiais-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+    env_file:
+      - ./financiais-app/.env.local
+    depends_on:
+      - db
+
+  # Local PostgreSQL Database (opcional/fallback local compatível com o schema)
+  db:
+    image: postgres:16-alpine
+    container_name: financiais-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: lumina_finance
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./financiais-app/supabase/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+
+volumes:
+  pgdata:
+    driver: local
