@@ -1,24 +1,40 @@
 "use client";
 
+import { useState, useMemo } from "react";
+import Link from "next/link";
 import { useFinance } from "@/contexts/FinanceContext";
+import NewTransactionModal from "@/components/NewTransactionModal";
 
 export default function DashboardPage() {
-  const { transactions, deleteTransaction, goals, isLoading } = useFinance();
+  const { transactions, categories, deleteTransaction, goals, isLoading } = useFinance();
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const fmt = (v: number) =>
     v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-  const totalIncome = transactions
-    .filter((t) => t.kind === "INCOME")
-    .reduce((s, t) => s + t.amount, 0);
+  const totalIncome = useMemo(
+    () =>
+      transactions
+        .filter((t) => t.kind === "INCOME")
+        .reduce((s, t) => s + t.amount, 0),
+    [transactions]
+  );
 
-  const extraIncome = transactions
-    .filter((t) => t.nature === "EXTRA")
-    .reduce((s, t) => s + t.amount, 0);
+  const extraIncome = useMemo(
+    () =>
+      transactions
+        .filter((t) => t.nature === "EXTRA" && t.kind === "INCOME")
+        .reduce((s, t) => s + t.amount, 0),
+    [transactions]
+  );
 
-  const totalExpense = transactions
-    .filter((t) => t.kind === "EXPENSE")
-    .reduce((s, t) => s + t.amount, 0);
+  const totalExpense = useMemo(
+    () =>
+      transactions
+        .filter((t) => t.kind === "EXPENSE")
+        .reduce((s, t) => s + t.amount, 0),
+    [transactions]
+  );
 
   const balance = totalIncome - totalExpense;
   const savingsRate =
@@ -31,6 +47,137 @@ export default function DashboardPage() {
     if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
     return dateStr;
   };
+
+  // 1. FLUXO SEMANAL DINÂMICO
+  const weeklyData = useMemo(() => {
+    const weeks = [
+      { label: "Sem 1", range: "01 a 07", start: 1, end: 7 },
+      { label: "Sem 2", range: "08 a 14", start: 8, end: 14 },
+      { label: "Sem 3", range: "15 a 21", start: 15, end: 21 },
+      { label: "Sem 4", range: "22 a 31", start: 22, end: 31 },
+    ];
+
+    const computed = weeks.map((w) => {
+      const txs = transactions.filter((t) => {
+        if (!t.date) return false;
+        const day = parseInt(t.date.split("-")[2] || "0", 10);
+        return day >= w.start && day <= w.end;
+      });
+
+      const entrada = txs
+        .filter((t) => t.kind === "INCOME")
+        .reduce((s, t) => s + t.amount, 0);
+      const saida = txs
+        .filter((t) => t.kind === "EXPENSE")
+        .reduce((s, t) => s + t.amount, 0);
+
+      return { label: w.label, range: w.range, entrada, saida };
+    });
+
+    const maxVal = Math.max(
+      ...computed.map((w) => Math.max(w.entrada, w.saida)),
+      1
+    );
+
+    return computed.map((w) => ({
+      ...w,
+      entradaPct: w.entrada > 0 ? Math.max(10, Math.round((w.entrada / maxVal) * 100)) : 0,
+      saidaPct: w.saida > 0 ? Math.max(10, Math.round((w.saida / maxVal) * 100)) : 0,
+      tooltip: `E: ${fmt(w.entrada)} / S: ${fmt(w.saida)}`,
+    }));
+  }, [transactions]);
+
+  // 2. GASTOS POR CATEGORIA DINÂMICO
+  const { categoryBreakdown, categoryCircumference } = useMemo(() => {
+    const expenses = transactions.filter((t) => t.kind === "EXPENSE");
+    const map: Record<string, number> = {};
+
+    for (const t of expenses) {
+      const name = t.category_name || "Geral";
+      map[name] = (map[name] || 0) + t.amount;
+    }
+
+    const palette = [
+      { color: "#F43F5E", tw: "bg-expense-rose" },
+      { color: "#F59E0B", tw: "bg-warning-amber" },
+      { color: "#8B5CF6", tw: "bg-extra-violet" },
+      { color: "#0EA5E9", tw: "bg-goal-sky" },
+      { color: "#10B981", tw: "bg-income-emerald" },
+      { color: "#EC4899", tw: "bg-pink-500" },
+      { color: "#6366F1", tw: "bg-indigo-500" },
+    ];
+
+    const sorted = Object.entries(map)
+      .map(([name, val], i) => ({
+        label: name,
+        value: val,
+        pct: totalExpense > 0 ? (val / totalExpense) * 100 : 0,
+        color: palette[i % palette.length].color,
+        twColor: palette[i % palette.length].tw,
+      }))
+      .sort((a, b) => b.value - a.value);
+
+    // SVG Donut calculation (circumference = 2 * pi * 60 = 376.99)
+    const C = 376.99;
+    let accumulatedOffset = 0;
+    const segments = sorted.map((cat) => {
+      const length = (cat.pct / 100) * C;
+      const strokeDasharray = `${length.toFixed(1)} ${(C - length).toFixed(1)}`;
+      const strokeDashoffset = (-accumulatedOffset).toFixed(1);
+      accumulatedOffset += length;
+      return {
+        ...cat,
+        strokeDasharray,
+        strokeDashoffset,
+      };
+    });
+
+    return { categoryBreakdown: segments, categoryCircumference: C };
+  }, [transactions, totalExpense]);
+
+  // 3. DINHEIRO EXTRA DINÂMICO
+  const extraTransactions = useMemo(
+    () =>
+      transactions
+        .filter((t) => t.nature === "EXTRA")
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [transactions]
+  );
+
+  // 4. LIMITES DE ORÇAMENTO DINÂMICO
+  const budgetedCategories = useMemo(() => {
+    const expenses = transactions.filter((t) => t.kind === "EXPENSE");
+    const seenNames = new Set<string>();
+    const uniqueBudgeted = categories.filter((c) => {
+      if (!c.monthly_limit || c.monthly_limit <= 0) return false;
+      if (seenNames.has(c.name)) return false;
+      seenNames.add(c.name);
+      return true;
+    });
+
+    return uniqueBudgeted
+      .map((cat) => {
+        const spent = expenses
+          .filter((t) => t.category_id === cat.id || t.category_name === cat.name)
+          .reduce((s, t) => s + t.amount, 0);
+        const limit = cat.monthly_limit || 0;
+        const pct = limit > 0 ? Math.round((spent / limit) * 100) : 0;
+        const remaining = limit - spent;
+        const warn = pct >= 80;
+
+        return {
+          id: cat.id,
+          label: cat.name,
+          icon: cat.icon || "receipt",
+          spent,
+          limit,
+          pct,
+          warn,
+          remaining,
+        };
+      })
+      .sort((a, b) => b.pct - a.pct);
+  }, [categories, transactions]);
 
   const handleExportCSV = () => {
     if (transactions.length === 0) return;
@@ -52,7 +199,10 @@ export default function DashboardPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", `dashboard_lancamentos_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute(
+      "download",
+      `dashboard_lancamentos_${new Date().toISOString().slice(0, 10)}.csv`
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -85,8 +235,12 @@ export default function DashboardPage() {
           <div className="flex flex-col">
             <span className="text-label-sm text-text-secondary">Projeção de Fechamento</span>
             <div className="flex items-baseline gap-space-xs">
-              <span className="text-headline-sm font-bold text-text-primary tabular-nums">{fmt(balance * 1.08)}</span>
-              <span className="text-label-sm text-income-emerald font-semibold">+8,2% acima da meta</span>
+              <span className="text-headline-sm font-bold text-text-primary tabular-nums">
+                {fmt(balance)}
+              </span>
+              <span className="text-label-sm text-income-emerald font-semibold">
+                {transactions.length > 0 ? "Ritmo em tempo real" : "Aguardando dados"}
+              </span>
             </div>
           </div>
         </div>
@@ -94,7 +248,7 @@ export default function DashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-space-md relative">
-        {/* KPI 1: Saldo do Mês */}
+        {/* KPI 1: Saldo Líquido */}
         <div className="relative overflow-hidden rounded-2xl bg-surface-card p-space-lg shadow-card border border-[rgba(255,255,255,0.05)] transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 animate-fade-in-up">
           <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-income-emerald/10 blur-xl" />
           <div className="flex items-center justify-between">
@@ -107,11 +261,11 @@ export default function DashboardPage() {
             {fmt(balance)}
           </div>
           <div className="mt-space-sm flex items-center justify-between pt-space-xs">
-            <div className="inline-flex items-center gap-space-2xs px-space-xs py-space-2xs rounded-lg bg-income-emerald/10 text-income-emerald text-label-sm font-semibold">
-              <span className="material-symbols-outlined text-xs">trending_up</span>
-              <span>+12,4% vs anterior</span>
+            <div className="inline-flex items-center gap-space-2xs px-space-xs py-space-2xs rounded-lg bg-surface-container-high text-text-secondary text-label-sm font-medium">
+              <span className="material-symbols-outlined text-xs">trending_flat</span>
+              <span>{transactions.length} lançamentos</span>
             </div>
-            <span className="text-label-sm text-text-muted">Projetado {fmt(balance * 1.08)}</span>
+            <span className="text-label-sm text-text-muted">Líquido do mês</span>
           </div>
         </div>
 
@@ -148,11 +302,10 @@ export default function DashboardPage() {
             {fmt(totalExpense)}
           </div>
           <div className="mt-space-sm flex items-center justify-between pt-space-xs">
-            <div className="inline-flex items-center gap-space-2xs px-space-xs py-space-2xs rounded-lg bg-income-emerald/10 text-income-emerald text-label-sm font-semibold">
-              <span className="material-symbols-outlined text-xs">arrow_downward</span>
-              <span>-18,7% vs limite</span>
+            <div className="inline-flex items-center gap-space-2xs px-space-xs py-space-2xs rounded-lg bg-expense-rose/10 text-expense-rose text-label-sm font-semibold">
+              <span className="material-symbols-outlined text-xs">receipt_long</span>
+              <span>Despesas pagas & pendentes</span>
             </div>
-            <span className="text-label-sm text-text-muted">Limite: R$ 2.000</span>
           </div>
         </div>
 
@@ -171,9 +324,14 @@ export default function DashboardPage() {
           </div>
           <div className="mt-space-sm flex items-center gap-space-xs">
             <div className="w-full bg-surface-container-high rounded-full h-1.5 overflow-hidden">
-              <div className="bg-goal-sky h-full rounded-full transition-all duration-700" style={{ width: `${Math.min(savingsRate, 100)}%` }} />
+              <div
+                className="bg-goal-sky h-full rounded-full transition-all duration-700"
+                style={{ width: `${Math.min(savingsRate, 100)}%` }}
+              />
             </div>
-            <span className="text-label-sm text-text-primary font-bold shrink-0 tabular-nums">{fmt(balance)}</span>
+            <span className="text-label-sm text-text-primary font-bold shrink-0 tabular-nums">
+              {fmt(balance)}
+            </span>
           </div>
         </div>
       </div>
@@ -187,7 +345,7 @@ export default function DashboardPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm pb-space-md">
               <div>
                 <span className="text-headline-sm font-semibold text-text-primary">Fluxo Semanal: Entradas vs Saídas</span>
-                <p className="text-body-md text-text-secondary mt-0.5">Comparativo das 4 semanas de Setembro</p>
+                <p className="text-body-md text-text-secondary mt-0.5">Comparativo das 4 semanas do mês</p>
               </div>
               <div className="flex items-center gap-space-md text-label-sm">
                 <div className="flex items-center gap-space-2xs">
@@ -201,12 +359,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="grid grid-cols-4 gap-space-md h-52 items-end pt-space-sm">
-              {[
-                { label: "Sem 1", range: "01 a 07", entrada: 100, saida: 38, tooltip: "E: 1.898 / S: 720" },
-                { label: "Sem 2", range: "08 a 14", entrada: 24, saida: 20, tooltip: "E: 450 / S: 380" },
-                { label: "Sem 3", range: "15 a 21", entrada: 18, saida: 15, tooltip: "E: 349 / S: 290" },
-                { label: "Sem 4", range: "22 a 30", entrada: 2, saida: 14, tooltip: "E: 0 / S: 273" },
-              ].map((week) => (
+              {weeklyData.map((week) => (
                 <div key={week.label} className="flex flex-col items-center h-full justify-end group cursor-pointer">
                   <div className="text-label-sm text-text-muted mb-space-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
                     {week.tooltip}
@@ -214,11 +367,11 @@ export default function DashboardPage() {
                   <div className="w-full flex items-end justify-center gap-space-xs h-40">
                     <div
                       className="w-7 sm:w-10 rounded-t-lg bg-gradient-to-t from-income-emerald/80 to-income-emerald transition-all duration-500 group-hover:brightness-125"
-                      style={{ height: `${week.entrada}%` }}
+                      style={{ height: `${week.entradaPct}%` }}
                     />
                     <div
                       className="w-7 sm:w-10 rounded-t-lg bg-gradient-to-t from-expense-rose/80 to-expense-rose transition-all duration-500 group-hover:brightness-125"
-                      style={{ height: `${week.saida}%` }}
+                      style={{ height: `${week.saidaPct}%` }}
                     />
                   </div>
                   <div className="mt-space-sm text-center">
@@ -230,97 +383,145 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Balance Line Chart */}
+          {/* Balance Evolution */}
           <div className="rounded-2xl bg-surface-card p-space-lg shadow-card border border-[rgba(255,255,255,0.05)]">
             <div className="flex items-center justify-between pb-space-sm">
               <div>
                 <h2 className="text-headline-sm font-semibold text-text-primary">Evolução do Saldo Acumulado</h2>
-                <span className="text-body-md text-text-secondary">Trajetória diária real vs projeção até o dia 30</span>
+                <span className="text-body-md text-text-secondary">Trajetória financeira no período</span>
               </div>
               <div className="flex items-center gap-space-sm text-label-sm">
                 <span className="flex items-center gap-space-2xs text-text-secondary">
                   <span className="w-4 h-0.5 bg-primary inline-block rounded" /> Realizado
                 </span>
-                <span className="flex items-center gap-space-2xs text-text-muted">
-                  <span className="w-4 h-0.5 border-b border-dashed border-tertiary inline-block" /> Projeção
-                </span>
               </div>
             </div>
             <div className="w-full pt-space-xs">
-              <svg className="w-full h-36 overflow-visible" viewBox="0 0 760 160" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                  <linearGradient id="areaGradient" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="#4edea3" stopOpacity="0.28" />
-                    <stop offset="100%" stopColor="#4edea3" stopOpacity="0.0" />
-                  </linearGradient>
-                </defs>
-                <line x1="0" x2="760" y1="30" y2="30" stroke="#31353e" strokeDasharray="3 3" opacity="0.3" />
-                <line x1="0" x2="760" y1="80" y2="80" stroke="#31353e" strokeDasharray="3 3" opacity="0.3" />
-                <line x1="0" x2="760" y1="130" y2="130" stroke="#31353e" strokeDasharray="3 3" opacity="0.3" />
-                <path d="M 0 135 Q 80 50 160 55 T 320 70 T 480 50 T 600 40 L 600 150 L 0 150 Z" fill="url(#areaGradient)" />
-                <path d="M 0 135 Q 80 50 160 55 T 320 70 T 480 50 T 600 40" stroke="#4edea3" strokeWidth="3" strokeLinecap="round" />
-                <path d="M 600 40 C 640 37, 700 32, 760 30" stroke="#89ceff" strokeWidth="2.5" strokeDasharray="5 5" strokeLinecap="round" />
-                <circle cx="600" cy="40" r="5" fill="#4edea3" />
-                <circle cx="600" cy="40" r="10" stroke="#4edea3" strokeOpacity="0.4" strokeWidth="2" />
-                <text x="600" y="24" textAnchor="middle" fill="#F8FAFC" fontSize="11" fontWeight="700" fontFamily="Plus Jakarta Sans">R$ 1.034,85</text>
-                <circle cx="760" cy="30" r="4" fill="#89ceff" />
-                <text x="740" y="20" fill="#89ceff" fontSize="10" fontWeight="600" fontFamily="Plus Jakarta Sans">R$ 1.120,00</text>
-              </svg>
+              {transactions.length === 0 ? (
+                <div className="h-36 flex flex-col items-center justify-center text-text-muted text-label-md">
+                  <span className="material-symbols-outlined text-2xl mb-1 text-text-muted/60">show_chart</span>
+                  <span>Nenhuma movimentação registrada no período</span>
+                </div>
+              ) : (
+                <svg className="w-full h-36 overflow-visible" viewBox="0 0 760 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <defs>
+                    <linearGradient id="areaGradient" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stopColor="#4edea3" stopOpacity="0.28" />
+                      <stop offset="100%" stopColor="#4edea3" stopOpacity="0.0" />
+                    </linearGradient>
+                  </defs>
+                  <line x1="0" x2="760" y1="30" y2="30" stroke="#31353e" strokeDasharray="3 3" opacity="0.3" />
+                  <line x1="0" x2="760" y1="80" y2="80" stroke="#31353e" strokeDasharray="3 3" opacity="0.3" />
+                  <line x1="0" x2="760" y1="130" y2="130" stroke="#31353e" strokeDasharray="3 3" opacity="0.3" />
+                  <path d="M 0 135 Q 80 80 160 85 T 320 70 T 480 50 T 600 40 L 600 150 L 0 150 Z" fill="url(#areaGradient)" />
+                  <path d="M 0 135 Q 80 80 160 85 T 320 70 T 480 50 T 600 40" stroke="#4edea3" strokeWidth="3" strokeLinecap="round" />
+                  <circle cx="600" cy="40" r="5" fill="#4edea3" />
+                  <circle cx="600" cy="40" r="10" stroke="#4edea3" strokeOpacity="0.4" strokeWidth="2" />
+                  <text x="600" y="24" textAnchor="middle" fill="#F8FAFC" fontSize="11" fontWeight="700" fontFamily="Plus Jakarta Sans">
+                    {fmt(balance)}
+                  </text>
+                </svg>
+              )}
               <div className="flex justify-between text-label-sm text-text-muted mt-space-2xs px-space-xs">
-                <span>01 Set (Salário)</span>
-                <span>10 Set</span>
-                <span>18 Set (OLX)</span>
-                <span className="text-primary font-bold">24 Set (Hoje)</span>
-                <span className="text-tertiary">30 Set (Meta)</span>
+                <span>01 do Mês</span>
+                <span>10 do Mês</span>
+                <span>20 do Mês</span>
+                <span className="text-primary font-bold">Hoje</span>
+                <span className="text-tertiary">Fim do Mês</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Right: Donut Chart (4 cols) */}
+        {/* Right: Donut Chart Gastos por Categoria (4 cols) */}
         <div className="lg:col-span-4 rounded-2xl bg-surface-card p-space-lg shadow-card border border-[rgba(255,255,255,0.05)] flex flex-col">
           <div className="flex items-center justify-between pb-space-sm">
             <h2 className="text-headline-sm font-semibold text-text-primary">Gastos por Categoria</h2>
-            <span className="text-label-sm text-text-secondary tabular-nums">Total: R$ 1.663,08</span>
+            <span className="text-label-sm text-text-secondary tabular-nums">
+              Total: {fmt(totalExpense)}
+            </span>
           </div>
+
           <div className="relative flex items-center justify-center my-space-md">
             <svg className="w-48 h-48 -rotate-90" viewBox="0 0 160 160">
-              <circle cx="80" cy="80" r="60" fill="transparent" stroke="#F43F5E" strokeWidth="16" strokeDasharray="149.6 227.4" strokeDashoffset="0" strokeLinecap="round" />
-              <circle cx="80" cy="80" r="60" fill="transparent" stroke="#F59E0B" strokeWidth="16" strokeDasharray="110.4 266.6" strokeDashoffset="-152" strokeLinecap="round" />
-              <circle cx="80" cy="80" r="60" fill="transparent" stroke="#8B5CF6" strokeWidth="16" strokeDasharray="69 308" strokeDashoffset="-265" strokeLinecap="round" />
-              <circle cx="80" cy="80" r="60" fill="transparent" stroke="#0EA5E9" strokeWidth="16" strokeDasharray="26.4 350.6" strokeDashoffset="-336" strokeLinecap="round" />
-              <circle cx="80" cy="80" r="60" fill="transparent" stroke="#4edea3" strokeWidth="16" strokeDasharray="21.5 355.5" strokeDashoffset="-364" strokeLinecap="round" />
+              {/* Background ring */}
+              <circle
+                cx="80"
+                cy="80"
+                r="60"
+                fill="transparent"
+                stroke="rgba(255,255,255,0.06)"
+                strokeWidth="16"
+              />
+
+              {/* Dynamic segments */}
+              {categoryBreakdown.map((cat) => (
+                <circle
+                  key={cat.label}
+                  cx="80"
+                  cy="80"
+                  r="60"
+                  fill="transparent"
+                  stroke={cat.color}
+                  strokeWidth="16"
+                  strokeDasharray={cat.strokeDasharray}
+                  strokeDashoffset={cat.strokeDashoffset}
+                  strokeLinecap="round"
+                />
+              ))}
             </svg>
+
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
               <span className="text-label-sm text-text-secondary">Despesas</span>
-              <span className="text-headline-sm font-bold text-text-primary tabular-nums">R$ 1.663,08</span>
-              <span className="text-label-sm text-income-emerald font-semibold">-18,7%</span>
+              <span className="text-headline-sm font-bold text-text-primary tabular-nums">
+                {fmt(totalExpense)}
+              </span>
+              <span className="text-label-sm text-text-muted">
+                {categoryBreakdown.length} {categoryBreakdown.length === 1 ? "categoria" : "categorias"}
+              </span>
             </div>
           </div>
+
           <div className="flex flex-col gap-space-xs mt-space-sm flex-1">
-            {[
-              { label: "Cartão Nubank", value: "R$ 660,62", pct: "39,7%", color: "bg-expense-rose" },
-              { label: "Outros / Variáveis", value: "R$ 487,00", pct: "29,3%", color: "bg-warning-amber" },
-              { label: "Parcela Curso Dev", value: "R$ 304,05", pct: "18,3%", color: "bg-extra-violet" },
-              { label: "Luz & Água", value: "R$ 116,41", pct: "7,0%", color: "bg-goal-sky" },
-              { label: "TV & Internet", value: "R$ 95,00", pct: "5,7%", color: "bg-primary" },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center justify-between p-space-xs rounded-xl hover:bg-surface-container transition-colors">
-                <div className="flex items-center gap-space-xs">
-                  <span className={`w-3 h-3 rounded-full ${item.color}`} />
-                  <span className="text-body-md text-text-primary">{item.label}</span>
-                </div>
-                <div className="flex items-center gap-space-sm text-label-md">
-                  <span className="text-text-primary font-bold tabular-nums">{item.value}</span>
-                  <span className="text-text-muted">{item.pct}</span>
-                </div>
+            {categoryBreakdown.length === 0 ? (
+              <div className="p-space-md text-center text-text-muted text-label-sm bg-surface-container-lowest rounded-xl">
+                Nenhum gasto registrado neste mês.
               </div>
-            ))}
+            ) : (
+              categoryBreakdown.slice(0, 5).map((item) => (
+                <div
+                  key={item.label}
+                  className="flex items-center justify-between p-space-xs rounded-xl hover:bg-surface-container transition-colors"
+                >
+                  <div className="flex items-center gap-space-xs">
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <span className="text-body-md text-text-primary truncate max-w-[120px]">
+                      {item.label}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-space-sm text-label-md">
+                    <span className="text-text-primary font-bold tabular-nums">
+                      {fmt(item.value)}
+                    </span>
+                    <span className="text-text-muted text-xs">
+                      {item.pct.toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
-          <button className="mt-space-md w-full py-space-xs px-space-md rounded-xl bg-surface-card-elevated hover:bg-surface-container-high text-text-secondary hover:text-text-primary text-label-md transition-all flex items-center justify-center gap-space-xs" type="button">
+
+          <Link
+            href="/categorias"
+            className="mt-space-md w-full py-space-xs px-space-md rounded-xl bg-surface-card-elevated hover:bg-surface-container-high text-text-secondary hover:text-text-primary text-label-md transition-all flex items-center justify-center gap-space-xs cursor-pointer"
+          >
             <span>Ver auditoria detalhada</span>
             <span className="material-symbols-outlined text-sm">open_in_new</span>
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -334,42 +535,66 @@ export default function DashboardPage() {
             </div>
             <div>
               <div className="flex items-center gap-space-xs">
-                <span className="text-label-sm text-extra-violet uppercase font-bold tracking-wider">Acelerador de Metas</span>
-                <span className="px-space-xs py-space-2xs rounded-full bg-extra-violet/15 text-extra-violet text-label-sm">Destaque</span>
+                <span className="text-label-sm text-extra-violet uppercase font-bold tracking-wider">
+                  Acelerador de Metas
+                </span>
+                <span className="px-space-xs py-space-2xs rounded-full bg-extra-violet/15 text-extra-violet text-label-sm font-semibold">
+                  Destaque
+                </span>
               </div>
               <h2 className="text-headline-md font-bold text-text-primary">Dinheiro Extra de Setembro</h2>
               <div className="flex items-baseline gap-space-xs mt-space-2xs">
-                <span className="text-display-currency font-extrabold text-text-primary tracking-tight tabular-nums">R$ 799,25</span>
+                <span className="text-display-currency font-extrabold text-text-primary tracking-tight tabular-nums">
+                  {fmt(extraIncome)}
+                </span>
                 <span className="text-label-md text-extra-violet">livre para aporte ou reserva</span>
               </div>
             </div>
           </div>
-          <button className="flex items-center gap-space-xs bg-extra-violet hover:bg-extra-violet-hover text-white text-headline-sm font-semibold px-space-lg py-space-sm rounded-2xl transition-all shadow-glow-violet active:scale-95 shrink-0" type="button">
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-space-xs bg-extra-violet hover:bg-extra-violet-hover text-white text-headline-sm font-semibold px-space-lg py-space-sm rounded-2xl transition-all shadow-glow-violet active:scale-95 shrink-0 cursor-pointer"
+            type="button"
+          >
             <span className="material-symbols-outlined text-lg leading-none">add_circle</span>
             <span>+ Lançar entrada extra</span>
           </button>
         </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-space-md mt-space-lg relative z-10">
-          {[
-            { label: "Freelance Landing Page", sub: "Design & Dev Web", value: "+ R$ 500,00", date: "12/09/2026" },
-            { label: "Venda Monitor Usado OLX", sub: "Desapego Eletrônicos", value: "+ R$ 180,00", date: "18/09/2026" },
-            { label: "Rendimento CDB Liquidez", sub: "100% CDI Mensal", value: "+ R$ 119,25", date: "22/09/2026" },
-          ].map((item) => (
-            <div key={item.label} className="rounded-2xl bg-surface-container-low/90 p-space-md flex flex-col justify-between hover:bg-surface-container transition-all border border-[rgba(255,255,255,0.04)]">
-              <div className="flex items-center justify-between pb-space-xs">
-                <span className="px-space-xs py-space-2xs rounded bg-extra-violet/20 text-extra-violet text-label-sm font-semibold">Extra</span>
-                <span className="text-label-sm text-text-muted">{item.date}</span>
-              </div>
-              <div className="mt-space-xs">
-                <span className="text-body-md text-text-primary font-semibold block">{item.label}</span>
-                <span className="text-label-sm text-text-secondary">{item.sub}</span>
-              </div>
-              <div className="mt-space-md flex items-center justify-between pt-space-xs">
-                <span className="text-table-data-currency font-bold text-extra-violet tabular-nums">{item.value}</span>
-                <span className="material-symbols-outlined text-xs text-income-emerald">check_circle</span>
-              </div>
+          {extraTransactions.length === 0 ? (
+            <div className="col-span-full rounded-2xl bg-surface-container-low/60 p-space-lg text-center text-text-muted text-body-md border border-[rgba(255,255,255,0.04)]">
+              Nenhuma entrada extra registrada neste mês. Clique em <strong>+ Lançar entrada extra</strong> para registrar vendas, bônus, freelas ou rendimentos.
             </div>
-          ))}
+          ) : (
+            extraTransactions.slice(0, 3).map((item) => (
+              <div
+                key={item.id}
+                className="rounded-2xl bg-surface-container-low/90 p-space-md flex flex-col justify-between hover:bg-surface-container transition-all border border-[rgba(255,255,255,0.04)]"
+              >
+                <div className="flex items-center justify-between pb-space-xs">
+                  <span className="px-space-xs py-space-2xs rounded bg-extra-violet/20 text-extra-violet text-label-sm font-semibold">
+                    Extra
+                  </span>
+                  <span className="text-label-sm text-text-muted">{formatDate(item.date)}</span>
+                </div>
+                <div className="mt-space-xs">
+                  <span className="text-body-md text-text-primary font-semibold block truncate">
+                    {item.description}
+                  </span>
+                  <span className="text-label-sm text-text-secondary truncate">
+                    {item.category_name || "Receita Extra"}
+                  </span>
+                </div>
+                <div className="mt-space-md flex items-center justify-between pt-space-xs">
+                  <span className="text-table-data-currency font-bold text-extra-violet tabular-nums">
+                    +{fmt(item.amount)}
+                  </span>
+                  <span className="material-symbols-outlined text-xs text-income-emerald">check_circle</span>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
@@ -380,39 +605,55 @@ export default function DashboardPage() {
             <h2 className="text-headline-sm font-semibold text-text-primary">Limites de Orçamento Mensal</h2>
             <span className="text-body-md text-text-secondary">Acompanhamento de tetos estabelecidos para o mês</span>
           </div>
-          <span className="text-label-sm text-text-muted">3 categorias ativas</span>
+          <span className="text-label-sm text-text-muted">
+            {budgetedCategories.length} {budgetedCategories.length === 1 ? "categoria ativa" : "categorias ativas"}
+          </span>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-space-lg">
-          {[
-            { icon: "credit_card", label: "Cartão de Crédito", pct: 82, spent: "R$ 660,62", limit: "R$ 800,00", remaining: "Restam R$ 139,38", warn: true },
-            { icon: "shopping_cart", label: "Gastos Variáveis", pct: 88, spent: "R$ 487,00", limit: "R$ 550,00", remaining: "Restam R$ 63,00", warn: true },
-            { icon: "home", label: "Contas Fixas", pct: 84, spent: "R$ 211,41", limit: "R$ 250,00", remaining: "Dentro do planejado", warn: false },
-          ].map((b) => (
-            <div key={b.label} className="rounded-2xl bg-surface-container-lowest p-space-md flex flex-col justify-between">
-              <div className="flex items-center justify-between mb-space-xs">
-                <div className="flex items-center gap-space-xs">
-                  <span className={`material-symbols-outlined text-base ${b.warn ? "text-warning-amber" : "text-income-emerald"}`}>{b.icon}</span>
-                  <span className="text-body-md text-text-primary font-semibold">{b.label}</span>
+
+        {budgetedCategories.length === 0 ? (
+          <div className="p-space-lg text-center rounded-2xl bg-surface-container-lowest border border-[rgba(255,255,255,0.04)] text-text-muted">
+            <p className="text-body-md mb-2">Nenhum teto de gastos configurado para as suas categorias.</p>
+            <Link
+              href="/categorias"
+              className="inline-flex items-center gap-1 text-label-md text-income-emerald hover:underline font-semibold"
+            >
+              <span>Definir limites em Categorias</span>
+              <span className="material-symbols-outlined text-sm">arrow_forward</span>
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-space-lg">
+            {budgetedCategories.slice(0, 3).map((b) => (
+              <div key={b.id} className="rounded-2xl bg-surface-container-lowest p-space-md flex flex-col justify-between">
+                <div className="flex items-center justify-between mb-space-xs">
+                  <div className="flex items-center gap-space-xs">
+                    <span className={`material-symbols-outlined text-base ${b.warn ? "text-warning-amber" : "text-income-emerald"}`}>
+                      {b.icon}
+                    </span>
+                    <span className="text-body-md text-text-primary font-semibold">{b.label}</span>
+                  </div>
+                  <span className={`text-label-sm font-bold ${b.warn ? "text-warning-amber" : "text-income-emerald"}`}>
+                    {b.pct}%
+                  </span>
                 </div>
-                <span className={`text-label-sm font-bold ${b.warn ? "text-warning-amber" : "text-income-emerald"}`}>{b.pct}%</span>
+                <div className="w-full bg-surface-container-high rounded-full h-2 overflow-hidden my-space-xs">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${b.warn ? "bg-warning-amber" : "bg-income-emerald"}`}
+                    style={{ width: `${Math.min(b.pct, 100)}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-label-sm text-text-secondary mt-space-2xs">
+                  <span>Gasto: <strong className="text-text-primary tabular-nums">{fmt(b.spent)}</strong></span>
+                  <span>Teto: {fmt(b.limit)}</span>
+                </div>
+                <span className={`text-label-sm mt-space-xs flex items-center gap-space-2xs ${b.warn ? "text-warning-amber" : "text-income-emerald"}`}>
+                  <span className="material-symbols-outlined text-xs">{b.warn ? "warning" : "check_circle"}</span>
+                  {b.remaining >= 0 ? `Restam ${fmt(b.remaining)}` : `Excedeu ${fmt(Math.abs(b.remaining))}`}
+                </span>
               </div>
-              <div className="w-full bg-surface-container-high rounded-full h-2 overflow-hidden my-space-xs">
-                <div
-                  className={`h-full rounded-full transition-all duration-500 ${b.warn ? "bg-warning-amber" : "bg-income-emerald"}`}
-                  style={{ width: `${b.pct}%` }}
-                />
-              </div>
-              <div className="flex items-center justify-between text-label-sm text-text-secondary mt-space-2xs">
-                <span>Gasto: <strong className="text-text-primary tabular-nums">{b.spent}</strong></span>
-                <span>Teto: {b.limit}</span>
-              </div>
-              <span className={`text-label-sm mt-space-xs flex items-center gap-space-2xs ${b.warn ? "text-warning-amber" : "text-income-emerald"}`}>
-                <span className="material-symbols-outlined text-xs">{b.warn ? "warning" : "check_circle"}</span>
-                {b.remaining}
-              </span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Recent Transactions */}
@@ -423,11 +664,18 @@ export default function DashboardPage() {
             <span className="text-body-md text-text-secondary">Extrato consolidado com entradas, extras e saídas</span>
           </div>
           <div className="flex items-center gap-space-xs">
-            <button className="px-space-md py-space-xs rounded-xl bg-surface-card-elevated hover:bg-surface-container-high text-text-primary text-label-sm transition-colors flex items-center gap-space-2xs" type="button">
+            <Link
+              href="/lancamentos"
+              className="px-space-md py-space-xs rounded-xl bg-surface-card-elevated hover:bg-surface-container-high text-text-primary text-label-sm transition-colors flex items-center gap-space-2xs"
+            >
               <span className="material-symbols-outlined text-base">filter_list</span>
               <span>Filtrar</span>
-            </button>
-            <button className="px-space-md py-space-xs rounded-xl bg-surface-card-elevated hover:bg-surface-container-high text-text-primary text-label-sm transition-colors flex items-center gap-space-2xs" type="button">
+            </Link>
+            <button
+              onClick={handleExportCSV}
+              className="px-space-md py-space-xs rounded-xl bg-surface-card-elevated hover:bg-surface-container-high text-text-primary text-label-sm transition-colors flex items-center gap-space-2xs cursor-pointer"
+              type="button"
+            >
               <span className="material-symbols-outlined text-base">file_download</span>
               <span>Exportar CSV</span>
             </button>
@@ -514,7 +762,7 @@ export default function DashboardPage() {
                           <button
                             onClick={() => deleteTransaction(t.id)}
                             aria-label="Excluir"
-                            className="text-text-muted hover:text-expense-rose p-space-2xs rounded-lg hover:bg-expense-rose/10 transition-colors"
+                            className="text-text-muted hover:text-expense-rose p-space-2xs rounded-lg hover:bg-expense-rose/10 transition-colors cursor-pointer"
                             type="button"
                           >
                             <span className="material-symbols-outlined text-base leading-none">delete</span>
@@ -534,11 +782,16 @@ export default function DashboardPage() {
           </span>
           <div className="flex items-center gap-space-xs">
             <button className="px-space-md py-space-2xs rounded-xl bg-surface-card hover:bg-surface-card-elevated text-text-secondary hover:text-text-primary text-label-sm transition-colors" type="button">Anterior</button>
-            <span className="px-space-sm text-label-sm text-text-primary font-bold">1 de 5</span>
+            <span className="px-space-sm text-label-sm text-text-primary font-bold">1 de 1</span>
             <button className="px-space-md py-space-2xs rounded-xl bg-surface-card hover:bg-surface-card-elevated text-text-secondary hover:text-text-primary text-label-sm transition-colors" type="button">Próximo</button>
           </div>
         </div>
       </div>
+
+      <NewTransactionModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+      />
     </div>
   );
 }
