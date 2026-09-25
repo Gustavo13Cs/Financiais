@@ -13,6 +13,7 @@ interface AuthContextType {
   isGuest: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
+  resendConfirmation: (email: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   continueAsGuest: () => void;
   refreshProfile: () => Promise<void>;
@@ -125,6 +126,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return result;
   };
 
+  const resendConfirmation = async (email: string) => {
+    if (!supabase) return { error: { message: "Supabase não configurado" } };
+    return await supabase.auth.resend({
+      type: "signup",
+      email,
+    });
+  };
+
   const signOut = async () => {
     if (supabase) {
       await supabase.auth.signOut();
@@ -161,6 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isGuest,
         signIn,
         signUp,
+        resendConfirmation,
         signOut,
         continueAsGuest,
         refreshProfile,

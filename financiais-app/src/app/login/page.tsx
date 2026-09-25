@@ -7,7 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 
 function LoginContent() {
   const router = useRouter();
-  const { signIn, signUp, continueAsGuest, user } = useAuth();
+  const { signIn, signUp, resendConfirmation, continueAsGuest, user } = useAuth();
 
   const [mode, setMode] = useState<"login" | "register">("login");
   const [fullName, setFullName] = useState("");
@@ -16,6 +16,9 @@ function LoginContent() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [isEmailUnconfirmed, setIsEmailUnconfirmed] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [resendStatus, setResendStatus] = useState<string | null>(null);
 
   // If already logged in, redirect to home
   if (user) {
@@ -26,16 +29,21 @@ function LoginContent() {
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
+    setIsEmailUnconfirmed(false);
+    setResendStatus(null);
     setLoading(true);
 
     if (mode === "login") {
       const { error } = await signIn(email.trim(), password);
       if (error) {
-        setErrorMsg(
-          error.message === "Invalid login credentials"
-            ? "E-mail ou senha incorretos."
-            : error.message || "Erro ao realizar login."
-        );
+        if (error.message === "Invalid login credentials") {
+          setErrorMsg("E-mail ou senha incorretos.");
+        } else if (error.message === "Email not confirmed") {
+          setIsEmailUnconfirmed(true);
+          setErrorMsg("E-mail não confirmado. O Supabase exige que seu e-mail seja confirmado antes de entrar.");
+        } else {
+          setErrorMsg(error.message || "Erro ao realizar login.");
+        }
         setLoading(false);
       } else {
         router.push("/");
@@ -52,16 +60,50 @@ function LoginContent() {
         return;
       }
 
-      const { error } = await signUp(email.trim(), password, fullName.trim());
+      const result: any = await signUp(email.trim(), password, fullName.trim());
+      const error = result?.error;
+      const data = result?.data;
+
       if (error) {
-        setErrorMsg(error.message || "Erro ao criar conta.");
+        if (error.message && error.message.toLowerCase().includes("already registered")) {
+          setErrorMsg("Este e-mail já está cadastrado. Clique na aba 'Entrar'.");
+        } else {
+          setErrorMsg(error.message || "Erro ao criar conta.");
+        }
         setLoading(false);
       } else {
-        setSuccessMsg("Conta criada com sucesso! Redirecionando...");
-        setTimeout(() => {
-          router.push("/");
-        }, 1200);
+        if (data?.user && !data.session) {
+          setIsEmailUnconfirmed(true);
+          setSuccessMsg("Conta criada com sucesso! Por favor, confirme seu e-mail.");
+        } else {
+          setSuccessMsg("Conta criada com sucesso! Redirecionando...");
+          setTimeout(() => {
+            router.push("/");
+          }, 1200);
+        }
+        setLoading(false);
       }
+    }
+  };
+
+  const handleResend = async () => {
+    if (!email.trim()) {
+      setErrorMsg("Digite seu e-mail no campo para reenviar a confirmação.");
+      return;
+    }
+    setIsResending(true);
+    setResendStatus(null);
+    try {
+      const { error } = await resendConfirmation(email.trim());
+      if (error) {
+        setResendStatus("Erro ao reenviar: " + (error.message || "tente novamente."));
+      } else {
+        setResendStatus("Link de confirmação reenviado para seu e-mail! Verifique sua caixa de entrada e spam.");
+      }
+    } catch {
+      setResendStatus("Erro ao reenviar. Tente novamente.");
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -130,6 +172,39 @@ function LoginContent() {
             <div className="mb-space-md p-space-sm bg-expense-rose/10 border border-expense-rose/20 rounded-xl text-expense-rose text-body-md flex items-center gap-space-xs animate-fade-in-up">
               <span className="material-symbols-outlined text-base">error</span>
               <span>{errorMsg}</span>
+            </div>
+          )}
+
+          {isEmailUnconfirmed && (
+            <div className="mb-space-md p-space-md bg-amber-500/10 border border-amber-500/30 rounded-2xl text-text-primary text-body-sm animate-fade-in-up">
+              <div className="flex items-center gap-space-xs text-amber-400 font-semibold mb-1">
+                <span className="material-symbols-outlined text-lg">mark_email_unread</span>
+                <span>Como liberar seu acesso agora:</span>
+              </div>
+              <p className="text-text-secondary text-label-sm leading-relaxed mb-3">
+                No painel do Supabase que você já tem aberto no navegador:
+              </p>
+              <div className="bg-surface-container-lowest/80 p-2.5 rounded-xl border border-white/5 text-label-xs text-text-secondary mb-3 space-y-1">
+                <p>1. No menu lateral, acesse <strong className="text-text-primary">Authentication &gt; Users</strong></p>
+                <p>2. Encontre seu e-mail (<strong className="text-text-primary">{email || "gustavocunha0401@gmail.com"}</strong>)</p>
+                <p>3. Clique nos três pontinhos (<strong className="text-text-primary">...</strong>) e selecione <strong className="text-income-emerald">Confirm user</strong></p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={isResending}
+                  className="px-3 py-1.5 rounded-lg bg-surface-container-high hover:bg-surface-container text-text-primary text-label-xs font-semibold transition-all border border-white/10 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-sm">send</span>
+                  {isResending ? "Reenviando link..." : "Reenviar e-mail de confirmação"}
+                </button>
+              </div>
+              {resendStatus && (
+                <p className="mt-2 text-label-xs text-income-emerald font-medium">
+                  {resendStatus}
+                </p>
+              )}
             </div>
           )}
 

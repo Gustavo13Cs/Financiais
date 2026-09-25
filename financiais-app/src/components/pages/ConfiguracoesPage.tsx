@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useFinance } from "@/contexts/FinanceContext";
 import { RecurringRule } from "@/types/finance";
 import ImportModal from "@/components/ImportModal";
+import Portal from "@/components/Portal";
 
 export default function ConfiguracoesPage() {
   const {
@@ -621,12 +622,13 @@ export default function ConfiguracoesPage() {
 
       {/* Add / Edit Recurring Item Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-[rgba(7,10,16,0.75)] backdrop-blur-sm"
-            onClick={() => setIsAddModalOpen(false)}
-          />
-          <div className="relative z-10 w-full max-w-md bg-surface-card rounded-2xl shadow-modal border border-[rgba(255,255,255,0.08)] overflow-hidden animate-fade-in-up">
+        <Portal>
+          <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-black/75 backdrop-blur-md"
+              onClick={() => setIsAddModalOpen(false)}
+            />
+            <div className="relative z-10 w-full max-w-md bg-surface-card rounded-2xl shadow-modal border border-[rgba(255,255,255,0.08)] overflow-hidden animate-fade-in-up">
             <div className="flex items-center justify-between px-space-lg py-space-md border-b border-[rgba(255,255,255,0.05)]">
               <h3 className="text-headline-sm font-bold text-text-primary">
                 {editingItem ? "Editar Recorrência" : "Nova Despesa Recorrente"}
@@ -758,6 +760,7 @@ export default function ConfiguracoesPage() {
             </form>
           </div>
         </div>
+      </Portal>
       )}
 
       {/* Import Modal */}

@@ -3,14 +3,24 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useFinance } from "@/contexts/FinanceContext";
+import { usePeriod } from "@/contexts/PeriodContext";
 import NewTransactionModal from "@/components/NewTransactionModal";
 
 export default function DashboardPage() {
-  const { transactions, categories, deleteTransaction, goals, isLoading } = useFinance();
+  const { transactions: allTransactions, categories, deleteTransaction, goals, isLoading } = useFinance();
+  const { selectedMonth, monthLabel, isCurrentMonth } = usePeriod();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const fmt = (v: number) =>
     v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  // Filter all transactions to the selected month
+  const transactions = useMemo(
+    () => allTransactions.filter(
+      (t) => (t.competence_month || t.date?.slice(0, 7)) === selectedMonth
+    ),
+    [allTransactions, selectedMonth]
+  );
 
   const totalIncome = useMemo(
     () =>
@@ -108,13 +118,16 @@ export default function DashboardPage() {
     ];
 
     const sorted = Object.entries(map)
-      .map(([name, val], i) => ({
-        label: name,
-        value: val,
-        pct: totalExpense > 0 ? (val / totalExpense) * 100 : 0,
-        color: palette[i % palette.length].color,
-        twColor: palette[i % palette.length].tw,
-      }))
+      .map(([name, val], i) => {
+        const found = categories.find((c) => c.name.toLowerCase() === name.toLowerCase());
+        return {
+          label: name,
+          value: val,
+          pct: totalExpense > 0 ? (val / totalExpense) * 100 : 0,
+          color: found?.color || palette[i % palette.length].color,
+          twColor: palette[i % palette.length].tw,
+        };
+      })
       .sort((a, b) => b.value - a.value);
 
     // SVG Donut calculation (circumference = 2 * pi * 60 = 376.99)
@@ -220,7 +233,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-space-xs text-label-sm text-text-secondary uppercase tracking-wider">
             <span>Cockpit Financeiro</span>
             <span className="w-1.5 h-1.5 rounded-full bg-income-emerald" />
-            <span className="text-text-primary">Setembro 2026</span>
+            <span className="text-text-primary">{monthLabel}</span>
           </div>
           <h1 className="text-headline-lg font-bold text-text-primary tracking-tight mt-space-2xs">
             Visão Geral & Performance
@@ -482,31 +495,31 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-space-xs mt-space-sm flex-1">
+          <div className="flex flex-col gap-space-xs mt-space-sm flex-1 max-h-80 overflow-y-auto pr-1">
             {categoryBreakdown.length === 0 ? (
               <div className="p-space-md text-center text-text-muted text-label-sm bg-surface-container-lowest rounded-xl">
                 Nenhum gasto registrado neste mês.
               </div>
             ) : (
-              categoryBreakdown.slice(0, 5).map((item) => (
+              categoryBreakdown.map((item) => (
                 <div
                   key={item.label}
                   className="flex items-center justify-between p-space-xs rounded-xl hover:bg-surface-container transition-colors"
                 >
-                  <div className="flex items-center gap-space-xs">
+                  <div className="flex items-center gap-space-xs min-w-0">
                     <span
                       className="w-3 h-3 rounded-full shrink-0"
                       style={{ backgroundColor: item.color }}
                     />
-                    <span className="text-body-md text-text-primary truncate max-w-[120px]">
+                    <span className="text-body-md text-text-primary truncate" title={item.label}>
                       {item.label}
                     </span>
                   </div>
-                  <div className="flex items-center gap-space-sm text-label-md">
+                  <div className="flex items-center gap-space-sm text-label-md shrink-0">
                     <span className="text-text-primary font-bold tabular-nums">
                       {fmt(item.value)}
                     </span>
-                    <span className="text-text-muted text-xs">
+                    <span className="text-text-muted text-xs tabular-nums">
                       {item.pct.toFixed(1)}%
                     </span>
                   </div>
@@ -598,30 +611,19 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Budget Progress */}
-      <div className="rounded-2xl bg-surface-card p-space-lg shadow-card border border-[rgba(255,255,255,0.05)]">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-xs pb-space-md">
-          <div>
-            <h2 className="text-headline-sm font-semibold text-text-primary">Limites de Orçamento Mensal</h2>
-            <span className="text-body-md text-text-secondary">Acompanhamento de tetos estabelecidos para o mês</span>
+      {/* Budget Progress (only rendered if user has any category budget configured) */}
+      {budgetedCategories.length > 0 && (
+        <div className="rounded-2xl bg-surface-card p-space-lg shadow-card border border-[rgba(255,255,255,0.05)]">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-xs pb-space-md">
+            <div>
+              <h2 className="text-headline-sm font-semibold text-text-primary">Limites de Orçamento Mensal</h2>
+              <span className="text-body-md text-text-secondary">Acompanhamento de tetos estabelecidos para o mês</span>
+            </div>
+            <span className="text-label-sm text-text-muted">
+              {budgetedCategories.length} {budgetedCategories.length === 1 ? "categoria ativa" : "categorias ativas"}
+            </span>
           </div>
-          <span className="text-label-sm text-text-muted">
-            {budgetedCategories.length} {budgetedCategories.length === 1 ? "categoria ativa" : "categorias ativas"}
-          </span>
-        </div>
 
-        {budgetedCategories.length === 0 ? (
-          <div className="p-space-lg text-center rounded-2xl bg-surface-container-lowest border border-[rgba(255,255,255,0.04)] text-text-muted">
-            <p className="text-body-md mb-2">Nenhum teto de gastos configurado para as suas categorias.</p>
-            <Link
-              href="/categorias"
-              className="inline-flex items-center gap-1 text-label-md text-income-emerald hover:underline font-semibold"
-            >
-              <span>Definir limites em Categorias</span>
-              <span className="material-symbols-outlined text-sm">arrow_forward</span>
-            </Link>
-          </div>
-        ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-space-lg">
             {budgetedCategories.slice(0, 3).map((b) => (
               <div key={b.id} className="rounded-2xl bg-surface-container-lowest p-space-md flex flex-col justify-between">
@@ -653,8 +655,8 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Recent Transactions */}
       <div className="rounded-2xl bg-surface-card shadow-card border border-[rgba(255,255,255,0.05)] overflow-hidden">

@@ -5,6 +5,7 @@ import { parseOFX, ParsedTransaction } from "@/lib/parsers/ofxParser";
 import { parseCSV } from "@/lib/parsers/csvParser";
 import { useFinance } from "@/contexts/FinanceContext";
 import { TransactionNature } from "@/types/finance";
+import Portal from "@/components/Portal";
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -170,12 +171,13 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
     .reduce((s, t) => s + t.amount, 0);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-[rgba(7,10,16,0.8)] backdrop-blur-md"
-        onClick={onClose}
-      />
+    <Portal>
+      <div className="fixed inset-0 z-[999] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        {/* Backdrop */}
+        <div
+          className="fixed inset-0 bg-black/75 backdrop-blur-md"
+          onClick={onClose}
+        />
 
       {/* Modal Dialog */}
       <div className="relative z-10 w-full max-w-4xl bg-surface-card rounded-3xl shadow-modal border border-[rgba(255,255,255,0.08)] overflow-hidden animate-fade-in-up flex flex-col max-h-[90vh]">
@@ -408,5 +410,6 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
         </div>
       </div>
     </div>
+    </Portal>
   );
 }

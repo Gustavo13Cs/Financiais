@@ -1,11 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useFinance } from "@/contexts/FinanceContext";
+import { usePeriod } from "@/contexts/PeriodContext";
 import NewTransactionModal from "@/components/NewTransactionModal";
+
+const MONTHS = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
 
 export default function MesPage() {
   const { transactions, deleteTransaction, editTransaction, isLoading } = useFinance();
+  const { selectedMonth, monthLabel, isCurrentMonth, viewMode } = usePeriod();
+
   const [activeWeek, setActiveWeek] = useState("all");
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -29,43 +37,67 @@ export default function MesPage() {
     return "4";
   };
 
-  const currentMonthTransactions = transactions.filter((t) => {
-    const q = search.toLowerCase();
-    const matchSearch =
-      !search ||
-      t.description.toLowerCase().includes(q) ||
-      (t.category_name || "").toLowerCase().includes(q);
-    return matchSearch;
-  });
+  // Derive month info from selectedMonth
+  const [selYear, selMonthNum] = selectedMonth.split("-").map(Number);
 
-  const weekSubtotals = {
-    "1": currentMonthTransactions.filter((t) => getWeekNumber(t.date) === "1" && t.kind === "EXPENSE").reduce((s, t) => s + t.amount, 0),
-    "2": currentMonthTransactions.filter((t) => getWeekNumber(t.date) === "2" && t.kind === "EXPENSE").reduce((s, t) => s + t.amount, 0),
-    "3": currentMonthTransactions.filter((t) => getWeekNumber(t.date) === "3" && t.kind === "EXPENSE").reduce((s, t) => s + t.amount, 0),
-    "4": currentMonthTransactions.filter((t) => getWeekNumber(t.date) === "4" && t.kind === "EXPENSE").reduce((s, t) => s + t.amount, 0),
-  };
+  // Week ranges for the selected month
+  const lastDay = new Date(selYear, selMonthNum, 0).getDate();
+  const weekRanges = [
+    { label: "Semana 1", value: "1", range: `01–07/${String(selMonthNum).padStart(2, "0")}` },
+    { label: "Semana 2", value: "2", range: `08–14/${String(selMonthNum).padStart(2, "0")}` },
+    { label: "Semana 3", value: "3", range: `15–21/${String(selMonthNum).padStart(2, "0")}` },
+    { label: "Semana 4", value: "4", range: `22–${lastDay}/${String(selMonthNum).padStart(2, "0")}` },
+  ];
+
+  // Filter transactions by selectedMonth and search
+  const monthTransactions = useMemo(() => {
+    const q = search.toLowerCase();
+    return transactions.filter((t) => {
+      const matchMonth = (t.competence_month || t.date?.slice(0, 7)) === selectedMonth;
+      const matchSearch =
+        !search ||
+        t.description.toLowerCase().includes(q) ||
+        (t.category_name || "").toLowerCase().includes(q);
+      return matchMonth && matchSearch;
+    });
+  }, [transactions, selectedMonth, search]);
+
+  const weekSubtotals = useMemo(() => ({
+    "1": monthTransactions.filter((t) => getWeekNumber(t.date) === "1" && t.kind === "EXPENSE").reduce((s, t) => s + t.amount, 0),
+    "2": monthTransactions.filter((t) => getWeekNumber(t.date) === "2" && t.kind === "EXPENSE").reduce((s, t) => s + t.amount, 0),
+    "3": monthTransactions.filter((t) => getWeekNumber(t.date) === "3" && t.kind === "EXPENSE").reduce((s, t) => s + t.amount, 0),
+    "4": monthTransactions.filter((t) => getWeekNumber(t.date) === "4" && t.kind === "EXPENSE").reduce((s, t) => s + t.amount, 0),
+  }), [monthTransactions]);
 
   const weeks = [
     { label: "Mês inteiro", value: "all" },
-    { label: "Semana 1", value: "1", range: "01–07/09", subtotal: fmt(weekSubtotals["1"]) },
-    { label: "Semana 2", value: "2", range: "08–14/09", subtotal: fmt(weekSubtotals["2"]) },
-    { label: "Semana 3", value: "3", range: "15–21/09", subtotal: fmt(weekSubtotals["3"]) },
-    { label: "Semana 4", value: "4", range: "22–30/09", subtotal: fmt(weekSubtotals["4"]) },
+    ...weekRanges.map((w) => ({
+      ...w,
+      subtotal: fmt(weekSubtotals[w.value as "1" | "2" | "3" | "4"]),
+    })),
   ];
 
+  // If viewMode is "semanal", default to current week when first rendered
+  const effectiveWeek = useMemo(() => {
+    if (viewMode === "semanal" && activeWeek === "all") {
+      // Auto-select current week
+      const today = new Date();
+      const day = today.getDate();
+      if (day <= 7) return "1";
+      if (day <= 14) return "2";
+      if (day <= 21) return "3";
+      return "4";
+    }
+    return activeWeek;
+  }, [viewMode, activeWeek]);
+
   const filtered =
-    activeWeek === "all"
-      ? currentMonthTransactions
-      : currentMonthTransactions.filter((t) => getWeekNumber(t.date) === activeWeek);
+    effectiveWeek === "all"
+      ? monthTransactions
+      : monthTransactions.filter((t) => getWeekNumber(t.date) === effectiveWeek);
 
-  const totalIn = filtered
-    .filter((t) => t.kind === "INCOME")
-    .reduce((s, t) => s + t.amount, 0);
-
-  const totalOut = filtered
-    .filter((t) => t.kind === "EXPENSE")
-    .reduce((s, t) => s + t.amount, 0);
-
+  const totalIn = filtered.filter((t) => t.kind === "INCOME").reduce((s, t) => s + t.amount, 0);
+  const totalOut = filtered.filter((t) => t.kind === "EXPENSE").reduce((s, t) => s + t.amount, 0);
   const balance = totalIn - totalOut;
 
   const formatDate = (d: string) => {
@@ -83,11 +115,19 @@ export default function MesPage() {
         <div className="flex flex-wrap items-center gap-space-sm">
           <div className="flex items-center gap-space-xs bg-surface-card px-space-md py-space-xs rounded-2xl shadow-sm border border-[rgba(255,255,255,0.05)]">
             <span className="material-symbols-outlined text-goal-sky text-base">calendar_month</span>
-            <span className="text-headline-sm font-semibold text-text-primary tracking-tight">Setembro 2026</span>
-            <span className="inline-flex items-center gap-1 ml-space-xs px-2 py-0.5 rounded-full text-label-sm bg-income-emerald/10 text-income-emerald">
-              <span className="w-1.5 h-1.5 rounded-full bg-income-emerald animate-pulse" /> Mês Vigente
-            </span>
+            <span className="text-headline-sm font-semibold text-text-primary tracking-tight">{monthLabel}</span>
+            {isCurrentMonth && (
+              <span className="inline-flex items-center gap-1 ml-space-xs px-2 py-0.5 rounded-full text-label-sm bg-income-emerald/10 text-income-emerald">
+                <span className="w-1.5 h-1.5 rounded-full bg-income-emerald animate-pulse" /> Mês Vigente
+              </span>
+            )}
           </div>
+          {viewMode === "semanal" && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-label-sm bg-goal-sky/10 text-goal-sky">
+              <span className="material-symbols-outlined text-xs">view_week</span>
+              Visão Semanal
+            </span>
+          )}
         </div>
         <div className="flex items-center flex-wrap gap-space-xs sm:gap-space-sm">
           <div className="relative flex-1 sm:w-64">
@@ -116,12 +156,10 @@ export default function MesPage() {
         <div className="bg-surface-card rounded-2xl p-space-md shadow-sm border border-[rgba(255,255,255,0.05)]">
           <span className="text-label-md text-text-secondary uppercase tracking-wider">Entradas Totais</span>
           <div className="text-display-currency font-extrabold text-income-emerald tracking-tight tabular-nums mt-space-xs">{fmt(totalIn)}</div>
-          <span className="text-label-sm text-income-emerald bg-income-emerald/10 px-space-xs py-space-2xs rounded-full mt-space-xs inline-block">+18,2% vs mês anterior</span>
         </div>
         <div className="bg-surface-card rounded-2xl p-space-md shadow-sm border border-[rgba(255,255,255,0.05)]">
           <span className="text-label-md text-text-secondary uppercase tracking-wider">Saídas Totais</span>
           <div className="text-display-currency font-extrabold text-expense-rose tracking-tight tabular-nums mt-space-xs">{fmt(totalOut)}</div>
-          <span className="text-label-sm text-warning-amber bg-warning-amber/10 px-space-xs py-space-2xs rounded-full mt-space-xs inline-block">-12,3% vs mês anterior</span>
         </div>
         <div className="bg-surface-card rounded-2xl p-space-md shadow-sm border border-[rgba(255,255,255,0.05)] relative overflow-hidden">
           <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-goal-sky/10 blur-xl" />
@@ -144,14 +182,14 @@ export default function MesPage() {
             key={w.value}
             onClick={() => setActiveWeek(w.value)}
             className={`px-space-md py-space-xs rounded-full text-label-sm font-semibold transition-all ${
-              activeWeek === w.value
+              effectiveWeek === w.value
                 ? "bg-income-emerald text-white shadow-glow"
                 : "bg-surface-card text-text-secondary hover:bg-surface-card-elevated border border-[rgba(255,255,255,0.06)]"
             }`}
             type="button"
           >
             {w.label}
-            {w.subtotal && <span className="ml-space-xs opacity-70">({w.subtotal})</span>}
+            {"subtotal" in w && w.subtotal && <span className="ml-space-xs opacity-70">({w.subtotal})</span>}
           </button>
         ))}
       </div>
@@ -174,14 +212,12 @@ export default function MesPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-text-muted">
-                    Carregando dados do mês...
-                  </td>
+                  <td colSpan={7} className="py-12 text-center text-text-muted">Carregando dados do mês...</td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-text-muted">
-                    Nenhum lançamento registrado para este filtro.
+                    Nenhum lançamento registrado para {monthLabel}{effectiveWeek !== "all" ? `, Semana ${effectiveWeek}` : ""}.
                   </td>
                 </tr>
               ) : (
@@ -234,7 +270,7 @@ export default function MesPage() {
                           !isExpense ? (isExtra ? "text-extra-violet bg-extra-violet/10" : "text-income-emerald bg-income-emerald/10") :
                           "text-expense-rose bg-expense-rose/10"
                         }`}>
-                          {isExtra ? "Entrada Extra" : isExpense ? "Gasto" : "Entrada Fixa"}
+                          {isExtra ? "Entrada Extra" : isExpense ? "Gasto" : t.nature === "FIXED" ? "Entrada Fixa" : "Entrada"}
                         </span>
                       </td>
                       <td className={`py-space-sm px-space-md text-table-data-currency font-bold text-right whitespace-nowrap tabular-nums ${

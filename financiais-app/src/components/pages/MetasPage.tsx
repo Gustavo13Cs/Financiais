@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useFinance } from "@/contexts/FinanceContext";
 import { Goal } from "@/types/finance";
+import Portal from "@/components/Portal";
 
 export default function MetasPage() {
   const { goals, contributeToGoal, addGoal, editGoal, deleteGoal, isLoading } = useFinance();
@@ -292,211 +293,217 @@ export default function MetasPage() {
 
       {/* Deposit Modal */}
       {isDepositModalOpen && selectedGoal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-[rgba(7,10,16,0.75)] backdrop-blur-sm" onClick={() => setIsDepositModalOpen(false)} />
-          <div className="relative z-10 w-full max-w-sm bg-surface-card rounded-2xl shadow-modal border border-[rgba(255,255,255,0.08)] overflow-hidden animate-fade-in-up p-space-lg">
-            <h3 className="text-headline-sm font-bold text-text-primary mb-1">Aportar em {selectedGoal.name}</h3>
-            <p className="text-label-sm text-text-muted mb-space-md">O valor será creditado na meta e registrado no seu histórico.</p>
-            <form onSubmit={handleConfirmDeposit} className="space-y-space-md">
-              <div>
-                <label className="text-label-sm font-semibold text-text-secondary block mb-1">Valor do Aporte (R$)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  required
-                  placeholder="0,00"
-                  value={depositAmount}
-                  onChange={(e) => setDepositAmount(e.target.value)}
-                  autoFocus
-                  className="w-full bg-surface-container-lowest border border-[rgba(255,255,255,0.08)] text-text-primary rounded-xl px-space-md py-space-sm text-body-md focus:outline-none focus:ring-2 focus:ring-income-emerald/40"
-                />
-              </div>
-              <div className="flex justify-end gap-space-xs">
-                <button type="button" onClick={() => setIsDepositModalOpen(false)} className="px-space-md py-space-xs rounded-xl text-text-secondary hover:text-text-primary text-label-md cursor-pointer">
-                  Cancelar
-                </button>
-                <button type="submit" className="px-space-lg py-space-xs bg-income-emerald hover:bg-income-emerald-hover text-white rounded-xl text-label-md font-semibold shadow-glow cursor-pointer">
-                  Confirmar Aporte
-                </button>
-              </div>
-            </form>
+        <Portal>
+          <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/75 backdrop-blur-md" onClick={() => setIsDepositModalOpen(false)} />
+            <div className="relative z-10 w-full max-w-sm bg-surface-card rounded-2xl shadow-modal border border-[rgba(255,255,255,0.08)] overflow-hidden animate-fade-in-up p-space-lg">
+              <h3 className="text-headline-sm font-bold text-text-primary mb-1">Aportar em {selectedGoal.name}</h3>
+              <p className="text-label-sm text-text-muted mb-space-md">O valor será creditado na meta e registrado no seu histórico.</p>
+              <form onSubmit={handleConfirmDeposit} className="space-y-space-md">
+                <div>
+                  <label className="text-label-sm font-semibold text-text-secondary block mb-1">Valor do Aporte (R$)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    placeholder="0,00"
+                    value={depositAmount}
+                    onChange={(e) => setDepositAmount(e.target.value)}
+                    autoFocus
+                    className="w-full bg-surface-container-lowest border border-[rgba(255,255,255,0.08)] text-text-primary rounded-xl px-space-md py-space-sm text-body-md focus:outline-none focus:ring-2 focus:ring-income-emerald/40"
+                  />
+                </div>
+                <div className="flex justify-end gap-space-xs">
+                  <button type="button" onClick={() => setIsDepositModalOpen(false)} className="px-space-md py-space-xs rounded-xl text-text-secondary hover:text-text-primary text-label-md cursor-pointer">
+                    Cancelar
+                  </button>
+                  <button type="submit" className="px-space-lg py-space-xs bg-income-emerald hover:bg-income-emerald-hover text-white rounded-xl text-label-md font-semibold shadow-glow cursor-pointer">
+                    Confirmar Aporte
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
+        </Portal>
       )}
 
       {/* New Goal Modal */}
       {isNewGoalModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-[rgba(7,10,16,0.75)] backdrop-blur-sm" onClick={() => setIsNewGoalModalOpen(false)} />
-          <div className="relative z-10 w-full max-w-md bg-surface-card rounded-2xl shadow-modal border border-[rgba(255,255,255,0.08)] overflow-hidden animate-fade-in-up p-space-lg">
-            <h3 className="text-headline-sm font-bold text-text-primary mb-1">Nova Meta Financeira</h3>
-            <p className="text-label-sm text-text-muted mb-space-md">Defina um objetivo, prazo e valor alvo.</p>
-            <form onSubmit={handleCreateGoal} className="space-y-space-md">
-              <div>
-                <label className="text-label-sm font-semibold text-text-secondary block mb-1">Nome do Objetivo</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: Viagem Japão, Reserva de Emergência..."
-                  value={newGoalName}
-                  onChange={(e) => setNewGoalName(e.target.value)}
-                  className="w-full bg-surface-container-lowest border border-[rgba(255,255,255,0.08)] text-text-primary rounded-xl px-space-md py-space-sm text-body-md focus:outline-none focus:ring-2 focus:ring-income-emerald/30"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-space-md">
+        <Portal>
+          <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/75 backdrop-blur-md" onClick={() => setIsNewGoalModalOpen(false)} />
+            <div className="relative z-10 w-full max-w-md bg-surface-card rounded-2xl shadow-modal border border-[rgba(255,255,255,0.08)] overflow-hidden animate-fade-in-up p-space-lg">
+              <h3 className="text-headline-sm font-bold text-text-primary mb-1">Nova Meta Financeira</h3>
+              <p className="text-label-sm text-text-muted mb-space-md">Defina um objetivo, prazo e valor alvo.</p>
+              <form onSubmit={handleCreateGoal} className="space-y-space-md">
                 <div>
-                  <label className="text-label-sm font-semibold text-text-secondary block mb-1">Valor Alvo (R$)</label>
+                  <label className="text-label-sm font-semibold text-text-secondary block mb-1">Nome do Objetivo</label>
                   <input
-                    type="number"
-                    step="0.01"
+                    type="text"
                     required
-                    placeholder="10000"
-                    value={newGoalTarget}
-                    onChange={(e) => setNewGoalTarget(e.target.value)}
+                    placeholder="Ex: Viagem Japão, Reserva de Emergência..."
+                    value={newGoalName}
+                    onChange={(e) => setNewGoalName(e.target.value)}
                     className="w-full bg-surface-container-lowest border border-[rgba(255,255,255,0.08)] text-text-primary rounded-xl px-space-md py-space-sm text-body-md focus:outline-none focus:ring-2 focus:ring-income-emerald/30"
                   />
                 </div>
-                <div>
-                  <label className="text-label-sm font-semibold text-text-secondary block mb-1">Já Guardado (R$)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="0"
-                    value={newGoalCurrent}
-                    onChange={(e) => setNewGoalCurrent(e.target.value)}
-                    className="w-full bg-surface-container-lowest border border-[rgba(255,255,255,0.08)] text-text-primary rounded-xl px-space-md py-space-sm text-body-md focus:outline-none focus:ring-2 focus:ring-income-emerald/30"
-                  />
+                <div className="grid grid-cols-2 gap-space-md">
+                  <div>
+                    <label className="text-label-sm font-semibold text-text-secondary block mb-1">Valor Alvo (R$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      placeholder="10000"
+                      value={newGoalTarget}
+                      onChange={(e) => setNewGoalTarget(e.target.value)}
+                      className="w-full bg-surface-container-lowest border border-[rgba(255,255,255,0.08)] text-text-primary rounded-xl px-space-md py-space-sm text-body-md focus:outline-none focus:ring-2 focus:ring-income-emerald/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-label-sm font-semibold text-text-secondary block mb-1">Já Guardado (R$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0"
+                      value={newGoalCurrent}
+                      onChange={(e) => setNewGoalCurrent(e.target.value)}
+                      className="w-full bg-surface-container-lowest border border-[rgba(255,255,255,0.08)] text-text-primary rounded-xl px-space-md py-space-sm text-body-md focus:outline-none focus:ring-2 focus:ring-income-emerald/30"
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-space-md">
-                <div>
-                  <label className="text-label-sm font-semibold text-text-secondary block mb-1">Ícone</label>
-                  <select
-                    value={newGoalIcon}
-                    onChange={(e) => setNewGoalIcon(e.target.value)}
-                    className="w-full bg-surface-container-lowest border border-[rgba(255,255,255,0.08)] text-text-primary rounded-xl px-space-md py-space-sm text-body-md focus:outline-none"
-                  >
-                    <option value="shield">Escudo (shield)</option>
-                    <option value="flight_takeoff">Viagem (flight)</option>
-                    <option value="laptop">Eletrônico (laptop)</option>
-                    <option value="home">Casa (home)</option>
-                    <option value="directions_car">Carro (car)</option>
-                    <option value="savings">Cofrinho (savings)</option>
-                    <option value="trending_up">Investimentos (invest)</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-space-md">
+                  <div>
+                    <label className="text-label-sm font-semibold text-text-secondary block mb-1">Ícone</label>
+                    <select
+                      value={newGoalIcon}
+                      onChange={(e) => setNewGoalIcon(e.target.value)}
+                      className="w-full bg-surface-container-lowest border border-[rgba(255,255,255,0.08)] text-text-primary rounded-xl px-space-md py-space-sm text-body-md focus:outline-none"
+                    >
+                      <option value="shield">Escudo (shield)</option>
+                      <option value="flight_takeoff">Viagem (flight)</option>
+                      <option value="laptop">Eletrônico (laptop)</option>
+                      <option value="home">Casa (home)</option>
+                      <option value="directions_car">Carro (car)</option>
+                      <option value="savings">Cofrinho (savings)</option>
+                      <option value="trending_up">Investimentos (invest)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-label-sm font-semibold text-text-secondary block mb-1">Cor</label>
+                    <select
+                      value={newGoalColor}
+                      onChange={(e) => setNewGoalColor(e.target.value)}
+                      className="w-full bg-surface-container-lowest border border-[rgba(255,255,255,0.08)] text-text-primary rounded-xl px-space-md py-space-sm text-body-md focus:outline-none"
+                    >
+                      <option value="#10B981">Verde Esmeralda</option>
+                      <option value="#0EA5E9">Azul Sky</option>
+                      <option value="#8B5CF6">Roxo Violeta</option>
+                      <option value="#F59E0B">Âmbar</option>
+                      <option value="#F43F5E">Rosa Escuro</option>
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label className="text-label-sm font-semibold text-text-secondary block mb-1">Cor</label>
-                  <select
-                    value={newGoalColor}
-                    onChange={(e) => setNewGoalColor(e.target.value)}
-                    className="w-full bg-surface-container-lowest border border-[rgba(255,255,255,0.08)] text-text-primary rounded-xl px-space-md py-space-sm text-body-md focus:outline-none"
-                  >
-                    <option value="#10B981">Verde Esmeralda</option>
-                    <option value="#0EA5E9">Azul Sky</option>
-                    <option value="#8B5CF6">Roxo Violeta</option>
-                    <option value="#F59E0B">Âmbar</option>
-                    <option value="#F43F5E">Rosa Escuro</option>
-                  </select>
+                <div className="flex justify-end gap-space-xs pt-space-xs">
+                  <button type="button" onClick={() => setIsNewGoalModalOpen(false)} className="px-space-md py-space-xs rounded-xl text-text-secondary hover:text-text-primary text-label-md cursor-pointer">
+                    Cancelar
+                  </button>
+                  <button type="submit" className="px-space-lg py-space-xs bg-income-emerald hover:bg-income-emerald-hover text-white rounded-xl text-label-md font-semibold shadow-glow cursor-pointer">
+                    Salvar Meta
+                  </button>
                 </div>
-              </div>
-              <div className="flex justify-end gap-space-xs pt-space-xs">
-                <button type="button" onClick={() => setIsNewGoalModalOpen(false)} className="px-space-md py-space-xs rounded-xl text-text-secondary hover:text-text-primary text-label-md cursor-pointer">
-                  Cancelar
-                </button>
-                <button type="submit" className="px-space-lg py-space-xs bg-income-emerald hover:bg-income-emerald-hover text-white rounded-xl text-label-md font-semibold shadow-glow cursor-pointer">
-                  Salvar Meta
-                </button>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
-        </div>
+        </Portal>
       )}
 
       {/* Edit Goal Modal */}
       {editingGoal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-[rgba(7,10,16,0.75)] backdrop-blur-sm" onClick={() => setEditingGoal(null)} />
-          <div className="relative z-10 w-full max-w-md bg-surface-card rounded-2xl shadow-modal border border-[rgba(255,255,255,0.08)] overflow-hidden animate-fade-in-up p-space-lg">
-            <h3 className="text-headline-sm font-bold text-text-primary mb-1">Editar Meta Financeira</h3>
-            <p className="text-label-sm text-text-muted mb-space-md">Atualize os valores ou detalhes do objetivo.</p>
-            <form onSubmit={handleSaveEdit} className="space-y-space-md">
-              <div>
-                <label className="text-label-sm font-semibold text-text-secondary block mb-1">Nome do Objetivo</label>
-                <input
-                  type="text"
-                  required
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="w-full bg-surface-container-lowest border border-[rgba(255,255,255,0.08)] text-text-primary rounded-xl px-space-md py-space-sm text-body-md focus:outline-none focus:ring-2 focus:ring-goal-sky/30"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-space-md">
+        <Portal>
+          <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/75 backdrop-blur-md" onClick={() => setEditingGoal(null)} />
+            <div className="relative z-10 w-full max-w-md bg-surface-card rounded-2xl shadow-modal border border-[rgba(255,255,255,0.08)] overflow-hidden animate-fade-in-up p-space-lg">
+              <h3 className="text-headline-sm font-bold text-text-primary mb-1">Editar Meta Financeira</h3>
+              <p className="text-label-sm text-text-muted mb-space-md">Atualize os valores ou detalhes do objetivo.</p>
+              <form onSubmit={handleSaveEdit} className="space-y-space-md">
                 <div>
-                  <label className="text-label-sm font-semibold text-text-secondary block mb-1">Valor Alvo (R$)</label>
+                  <label className="text-label-sm font-semibold text-text-secondary block mb-1">Nome do Objetivo</label>
                   <input
-                    type="number"
-                    step="0.01"
+                    type="text"
                     required
-                    value={editTarget}
-                    onChange={(e) => setEditTarget(e.target.value)}
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
                     className="w-full bg-surface-container-lowest border border-[rgba(255,255,255,0.08)] text-text-primary rounded-xl px-space-md py-space-sm text-body-md focus:outline-none focus:ring-2 focus:ring-goal-sky/30"
                   />
                 </div>
-                <div>
-                  <label className="text-label-sm font-semibold text-text-secondary block mb-1">Guardado Atual (R$)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={editCurrent}
-                    onChange={(e) => setEditCurrent(e.target.value)}
-                    className="w-full bg-surface-container-lowest border border-[rgba(255,255,255,0.08)] text-text-primary rounded-xl px-space-md py-space-sm text-body-md focus:outline-none focus:ring-2 focus:ring-goal-sky/30"
-                  />
+                <div className="grid grid-cols-2 gap-space-md">
+                  <div>
+                    <label className="text-label-sm font-semibold text-text-secondary block mb-1">Valor Alvo (R$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      value={editTarget}
+                      onChange={(e) => setEditTarget(e.target.value)}
+                      className="w-full bg-surface-container-lowest border border-[rgba(255,255,255,0.08)] text-text-primary rounded-xl px-space-md py-space-sm text-body-md focus:outline-none focus:ring-2 focus:ring-goal-sky/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-label-sm font-semibold text-text-secondary block mb-1">Guardado Atual (R$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editCurrent}
+                      onChange={(e) => setEditCurrent(e.target.value)}
+                      className="w-full bg-surface-container-lowest border border-[rgba(255,255,255,0.08)] text-text-primary rounded-xl px-space-md py-space-sm text-body-md focus:outline-none focus:ring-2 focus:ring-goal-sky/30"
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-space-md">
-                <div>
-                  <label className="text-label-sm font-semibold text-text-secondary block mb-1">Ícone</label>
-                  <select
-                    value={editIcon}
-                    onChange={(e) => setEditIcon(e.target.value)}
-                    className="w-full bg-surface-container-lowest border border-[rgba(255,255,255,0.08)] text-text-primary rounded-xl px-space-md py-space-sm text-body-md focus:outline-none"
-                  >
-                    <option value="shield">Escudo (shield)</option>
-                    <option value="flight_takeoff">Viagem (flight)</option>
-                    <option value="laptop">Eletrônico (laptop)</option>
-                    <option value="home">Casa (home)</option>
-                    <option value="directions_car">Carro (car)</option>
-                    <option value="savings">Cofrinho (savings)</option>
-                    <option value="trending_up">Investimentos (invest)</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-space-md">
+                  <div>
+                    <label className="text-label-sm font-semibold text-text-secondary block mb-1">Ícone</label>
+                    <select
+                      value={editIcon}
+                      onChange={(e) => setEditIcon(e.target.value)}
+                      className="w-full bg-surface-container-lowest border border-[rgba(255,255,255,0.08)] text-text-primary rounded-xl px-space-md py-space-sm text-body-md focus:outline-none"
+                    >
+                      <option value="shield">Escudo (shield)</option>
+                      <option value="flight_takeoff">Viagem (flight)</option>
+                      <option value="laptop">Eletrônico (laptop)</option>
+                      <option value="home">Casa (home)</option>
+                      <option value="directions_car">Carro (car)</option>
+                      <option value="savings">Cofrinho (savings)</option>
+                      <option value="trending_up">Investimentos (invest)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-label-sm font-semibold text-text-secondary block mb-1">Cor</label>
+                    <select
+                      value={editColor}
+                      onChange={(e) => setEditColor(e.target.value)}
+                      className="w-full bg-surface-container-lowest border border-[rgba(255,255,255,0.08)] text-text-primary rounded-xl px-space-md py-space-sm text-body-md focus:outline-none"
+                    >
+                      <option value="#10B981">Verde Esmeralda</option>
+                      <option value="#0EA5E9">Azul Sky</option>
+                      <option value="#8B5CF6">Roxo Violeta</option>
+                      <option value="#F59E0B">Âmbar</option>
+                      <option value="#F43F5E">Rosa Escuro</option>
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label className="text-label-sm font-semibold text-text-secondary block mb-1">Cor</label>
-                  <select
-                    value={editColor}
-                    onChange={(e) => setEditColor(e.target.value)}
-                    className="w-full bg-surface-container-lowest border border-[rgba(255,255,255,0.08)] text-text-primary rounded-xl px-space-md py-space-sm text-body-md focus:outline-none"
-                  >
-                    <option value="#10B981">Verde Esmeralda</option>
-                    <option value="#0EA5E9">Azul Sky</option>
-                    <option value="#8B5CF6">Roxo Violeta</option>
-                    <option value="#F59E0B">Âmbar</option>
-                    <option value="#F43F5E">Rosa Escuro</option>
-                  </select>
+                <div className="flex justify-end gap-space-xs pt-space-xs">
+                  <button type="button" onClick={() => setEditingGoal(null)} className="px-space-md py-space-xs rounded-xl text-text-secondary hover:text-text-primary text-label-md cursor-pointer">
+                    Cancelar
+                  </button>
+                  <button type="submit" className="px-space-lg py-space-xs bg-goal-sky hover:bg-goal-sky-hover text-white rounded-xl text-label-md font-semibold shadow-glow cursor-pointer">
+                    Salvar Alterações
+                  </button>
                 </div>
-              </div>
-              <div className="flex justify-end gap-space-xs pt-space-xs">
-                <button type="button" onClick={() => setEditingGoal(null)} className="px-space-md py-space-xs rounded-xl text-text-secondary hover:text-text-primary text-label-md cursor-pointer">
-                  Cancelar
-                </button>
-                <button type="submit" className="px-space-lg py-space-xs bg-goal-sky hover:bg-goal-sky-hover text-white rounded-xl text-label-md font-semibold shadow-glow cursor-pointer">
-                  Salvar Alterações
-                </button>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
-        </div>
+        </Portal>
       )}
     </div>
   );

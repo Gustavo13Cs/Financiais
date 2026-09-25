@@ -9,6 +9,7 @@ import {
   removeTransaction,
   fetchCategories,
   saveCategory,
+  removeCategory,
   fetchGoals,
   saveGoal,
   removeGoal,
@@ -36,9 +37,12 @@ interface FinanceContextType {
   unreadAlertCount: number;
   isLoading: boolean;
   addTransaction: (tx: Omit<Transaction, "id">) => Promise<Transaction>;
+  addTransactions: (txs: Omit<Transaction, "id">[]) => Promise<Transaction[]>;
   editTransaction: (id: string, tx: Partial<Transaction>) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
   addCategory: (cat: Omit<Category, "id">) => Promise<Category>;
+  editCategory: (id: string, cat: Partial<Category>) => Promise<void>;
+  deleteCategory: (id: string) => Promise<void>;
   addGoal: (goal: Omit<Goal, "id">) => Promise<Goal>;
   editGoal: (id: string, goal: Partial<Goal>) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
@@ -207,6 +211,16 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     return created;
   };
 
+  const addTransactions = async (txs: Omit<Transaction, "id">[]) => {
+    const createdList: Transaction[] = [];
+    for (const tx of txs) {
+      const created = await saveTransaction(tx);
+      createdList.push(created);
+    }
+    setTransactions((prev) => [...createdList, ...prev]);
+    return createdList;
+  };
+
   const editTransaction = async (id: string, changes: Partial<Transaction>) => {
     const existing = transactions.find((t) => t.id === id);
     if (!existing) return;
@@ -224,6 +238,19 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     const created = await saveCategory(cat);
     setCategories((prev) => [...prev, created]);
     return created;
+  };
+
+  const editCategory = async (id: string, changes: Partial<Category>) => {
+    const existing = categories.find((c) => c.id === id);
+    if (!existing) return;
+    const updated = { ...existing, ...changes };
+    await saveCategory(updated);
+    setCategories((prev) => prev.map((c) => (c.id === id ? updated : c)));
+  };
+
+  const deleteCategory = async (id: string) => {
+    await removeCategory(id);
+    setCategories((prev) => prev.filter((c) => c.id !== id));
   };
 
   const addGoal = async (goal: Omit<Goal, "id">) => {
@@ -297,9 +324,12 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       unreadAlertCount,
       isLoading,
       addTransaction,
+      addTransactions,
       editTransaction,
       deleteTransaction,
       addCategory,
+      editCategory,
+      deleteCategory,
       addGoal,
       editGoal,
       deleteGoal,

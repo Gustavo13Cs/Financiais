@@ -9,16 +9,30 @@ const STORAGE_KEYS = {
   RECURRING: "lumina_recurring_v1",
 };
 
+export function ensureUUID(id?: string): string {
+  if (id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    return id;
+  }
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 // Initial Seed Data for fallback / offline
 export const INITIAL_CATEGORIES: Category[] = [
-  { id: "cat-1", name: "Moradia", kind: "EXPENSE", icon: "home", color: "#0EA5E9", monthly_limit: 800 },
-  { id: "cat-2", name: "Alimentação", kind: "EXPENSE", icon: "restaurant", color: "#10B981", monthly_limit: 700 },
-  { id: "cat-3", name: "Transporte", kind: "EXPENSE", icon: "directions_car", color: "#F59E0B", monthly_limit: 350 },
-  { id: "cat-4", name: "Saúde", kind: "EXPENSE", icon: "favorite", color: "#F43F5E", monthly_limit: 200 },
-  { id: "cat-5", name: "Lazer", kind: "EXPENSE", icon: "sports_esports", color: "#8B5CF6", monthly_limit: 250 },
-  { id: "cat-6", name: "Assinaturas", kind: "EXPENSE", icon: "subscriptions", color: "#4EDEA3", monthly_limit: 100 },
-  { id: "cat-7", name: "Educação", kind: "EXPENSE", icon: "school", color: "#89CEFF", monthly_limit: 350 },
-  { id: "cat-8", name: "Utilidades", kind: "EXPENSE", icon: "receipt_long", color: "#F59E0B", monthly_limit: 250 },
+  { id: "cat-1", name: "Moradia", kind: "EXPENSE", icon: "home", color: "#0EA5E9" },
+  { id: "cat-2", name: "Alimentação", kind: "EXPENSE", icon: "restaurant", color: "#10B981" },
+  { id: "cat-3", name: "Transporte", kind: "EXPENSE", icon: "directions_car", color: "#F59E0B" },
+  { id: "cat-4", name: "Saúde", kind: "EXPENSE", icon: "favorite", color: "#F43F5E" },
+  { id: "cat-5", name: "Lazer", kind: "EXPENSE", icon: "sports_esports", color: "#8B5CF6" },
+  { id: "cat-6", name: "Assinaturas", kind: "EXPENSE", icon: "subscriptions", color: "#4EDEA3" },
+  { id: "cat-7", name: "Educação", kind: "EXPENSE", icon: "school", color: "#89CEFF" },
+  { id: "cat-8", name: "Utilidades", kind: "EXPENSE", icon: "receipt_long", color: "#F59E0B" },
   { id: "cat-9", name: "Salário", kind: "INCOME", icon: "payments", color: "#10B981" },
   { id: "cat-10", name: "Freelance", kind: "INCOME", icon: "laptop", color: "#8B5CF6" },
   { id: "cat-11", name: "Vendas", kind: "INCOME", icon: "storefront", color: "#8B5CF6" },
@@ -118,7 +132,7 @@ export async function saveTransaction(t: Omit<Transaction, "id"> & { id?: string
   const newTx: Transaction = {
     ...t,
     user_id: userId,
-    id: t.id || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `tx-${Date.now()}`),
+    id: ensureUUID(t.id),
     created_at: new Date().toISOString(),
   };
 
@@ -165,9 +179,10 @@ export async function removeTransaction(id: string): Promise<void> {
 }
 
 export async function fetchCategories(): Promise<Category[]> {
+  const userId = await getAuthUserId();
+
   if (isSupabaseConfigured && supabase) {
     try {
-      const userId = await getAuthUserId();
       let query = supabase
         .from("categories")
         .select("*")
@@ -181,13 +196,51 @@ export async function fetchCategories(): Promise<Category[]> {
       const { data, error } = await query;
 
       if (!error && Array.isArray(data)) {
-        return data;
+        if (data.length === 0 && userId) {
+          // If first time and user has no categories, seed from INITIAL_CATEGORIES
+          for (const c of INITIAL_CATEGORIES) {
+            await saveCategory({
+              name: c.name,
+              kind: c.kind,
+              icon: c.icon,
+              color: c.color,
+              monthly_limit: c.monthly_limit,
+              user_id: userId,
+            });
+          }
+          const refetched = await supabase
+            .from("categories")
+            .select("*")
+            .is("archived_at", null)
+            .or(`user_id.eq.${userId},user_id.is.null`)
+            .order("name");
+          if (refetched.data && refetched.data.length > 0) {
+            return refetched.data;
+          }
+          return INITIAL_CATEGORIES;
+        }
+
+        // Deduplicate by name+kind
+        const seen = new Set<string>();
+        const result = data.filter((cat: Category) => {
+          const key = `${cat.name.toLowerCase()}::${cat.kind}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+        if (typeof window !== "undefined") {
+          localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(result));
+        }
+
+        return result;
       }
     } catch (e) {
       console.warn("Supabase categories fetch failed", e);
     }
   }
 
+  // Local fallback
   if (typeof window !== "undefined") {
     const saved = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
     if (saved !== null) {
@@ -195,12 +248,10 @@ export async function fetchCategories(): Promise<Category[]> {
         return JSON.parse(saved);
       } catch {}
     }
-    if (!isSupabaseConfigured) {
-      localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(INITIAL_CATEGORIES));
-      return INITIAL_CATEGORIES;
-    }
+    localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(INITIAL_CATEGORIES));
+    return INITIAL_CATEGORIES;
   }
-  return [];
+  return INITIAL_CATEGORIES;
 }
 
 export async function saveCategory(cat: Omit<Category, "id"> & { id?: string }): Promise<Category> {
@@ -208,18 +259,27 @@ export async function saveCategory(cat: Omit<Category, "id"> & { id?: string }):
   const newCat: Category = {
     ...cat,
     user_id: userId,
-    id: cat.id || `cat-${Date.now()}`,
+    id: ensureUUID(cat.id),
     created_at: new Date().toISOString(),
   };
 
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from("categories").upsert(newCat);
-    } catch (e) {}
+      const { error } = await supabase.from("categories").upsert(newCat);
+      if (error) {
+        console.error("Supabase save category error", error);
+      }
+    } catch (e) {
+      console.error("Supabase save category failed", e);
+    }
   }
 
   if (typeof window !== "undefined") {
-    const list = await fetchCategories();
+    let list: Category[] = [];
+    const saved = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
+    if (saved) {
+      try { list = JSON.parse(saved); } catch {}
+    }
     const idx = list.findIndex((c) => c.id === newCat.id);
     const updated = idx >= 0 ? list.map((c) => (c.id === newCat.id ? newCat : c)) : [...list, newCat];
     localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(updated));
@@ -231,12 +291,21 @@ export async function saveCategory(cat: Omit<Category, "id"> & { id?: string }):
 export async function removeCategory(id: string): Promise<void> {
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from("categories").update({ archived_at: new Date().toISOString() }).eq("id", id);
-    } catch (e) {}
+      const { error } = await supabase.from("categories").delete().eq("id", id);
+      if (error) {
+        await supabase.from("categories").update({ archived_at: new Date().toISOString() }).eq("id", id);
+      }
+    } catch (e) {
+      console.warn("Supabase delete category error", e);
+    }
   }
 
   if (typeof window !== "undefined") {
-    const list = await fetchCategories();
+    let list: Category[] = [];
+    const saved = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
+    if (saved) {
+      try { list = JSON.parse(saved); } catch {}
+    }
     const filtered = list.filter((c) => c.id !== id);
     localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(filtered));
   }
@@ -283,7 +352,7 @@ export async function saveGoal(goal: Omit<Goal, "id"> & { id?: string }): Promis
   const newGoal: Goal = {
     ...goal,
     user_id: userId,
-    id: goal.id || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `goal-${Date.now()}`),
+    id: ensureUUID(goal.id),
     created_at: new Date().toISOString(),
   };
 
@@ -345,6 +414,7 @@ export async function addGoalDeposit(goalId: string, amount: number): Promise<vo
 // ==========================================
 
 export const INITIAL_RECURRING: RecurringRule[] = [
+  { id: "rec-0", description: "Salário Empresa Principal", amount: 1898.68, kind: "INCOME", day_of_month: 1, frequency: "MONTHLY", category_name: "Salário", icon: "payments", is_active: true },
   { id: "rec-1", description: "Aluguel Apartamento", amount: 720.0, kind: "EXPENSE", day_of_month: 5, frequency: "MONTHLY", category_name: "Moradia", icon: "home", is_active: true },
   { id: "rec-2", description: "Academia Smart Fit", amount: 110.0, kind: "EXPENSE", day_of_month: 16, frequency: "MONTHLY", category_name: "Saúde", icon: "fitness_center", is_active: true },
   { id: "rec-3", description: "Parcela Curso Dev (08/12)", amount: 304.05, kind: "EXPENSE", day_of_month: 12, frequency: "MONTHLY", category_name: "Educação", icon: "school", is_active: true },
@@ -394,7 +464,7 @@ export async function saveRecurringRule(rule: Omit<RecurringRule, "id"> & { id?:
   const newRule: RecurringRule = {
     ...rule,
     user_id: userId,
-    id: rule.id || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `rec-${Date.now()}`),
+    id: ensureUUID(rule.id),
     created_at: new Date().toISOString(),
   };
 
@@ -436,49 +506,56 @@ export async function processRecurringTransactions(targetMonth?: string): Promis
   const month = targetMonth || new Date().toISOString().slice(0, 7);
   let createdCount = 0;
 
-  // Try RPC in Supabase first
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const { data, error } = await supabase.rpc("generate_monthly_recurring_transactions", {
-        target_month: month,
-      });
-      if (!error && typeof data === "number") {
-        return { createdCount: data };
-      }
-    } catch (e) {}
-  }
-
-  // Fallback generation logic (client or local storage)
+  // Fetch active rules and all existing transactions
   const rules = await fetchRecurringRules();
-  const activeRules = rules.filter((r) => r.is_active && (!r.last_generated_month || r.last_generated_month < month));
-
-  const [yearStr, monthStr] = month.split("-");
-  const yearInt = parseInt(yearStr, 10);
-  const monthInt = parseInt(monthStr, 10);
+  const allTxs = await fetchTransactions();
+  const activeRules = rules.filter((r) => r.is_active);
 
   for (const rule of activeRules) {
-    const day = Math.min(rule.day_of_month, 28);
-    const dateFormatted = `${month}-${String(day).padStart(2, "0")}`;
+    // Check if transaction already exists for this rule in targetMonth
+    const alreadyExists = allTxs.some(
+      (t) =>
+        (t.competence_month === month || t.date?.slice(0, 7) === month) &&
+        t.nature === "FIXED" &&
+        t.description.toLowerCase().trim() === rule.description.toLowerCase().trim() &&
+        t.kind === rule.kind
+    );
 
-    await saveTransaction({
-      user_id: rule.user_id,
-      kind: rule.kind,
-      nature: "FIXED",
-      description: rule.description,
-      amount: rule.amount,
-      date: dateFormatted,
-      competence_month: month,
-      status: "PENDING",
-      category_id: rule.category_id,
-      category_name: rule.category_name,
-    });
+    if (!alreadyExists) {
+      // Check if targetMonth is earlier than the first known transaction of this rule (don't generate before start)
+      const ruleTxs = allTxs.filter(
+        (t) =>
+          t.nature === "FIXED" &&
+          t.description.toLowerCase().trim() === rule.description.toLowerCase().trim() &&
+          t.kind === rule.kind
+      );
+      if (ruleTxs.length > 0) {
+        const earliestMonth = ruleTxs.reduce((min, t) => {
+          const m = t.competence_month || t.date?.slice(0, 7) || "";
+          return m && m < min ? m : min;
+        }, "9999-99");
+        if (month < earliestMonth) {
+          continue;
+        }
+      }
+      const day = Math.min(rule.day_of_month || 1, 28);
+      const dateFormatted = `${month}-${String(day).padStart(2, "0")}`;
 
-    await saveRecurringRule({
-      ...rule,
-      last_generated_month: month,
-    });
+      await saveTransaction({
+        user_id: rule.user_id,
+        kind: rule.kind,
+        nature: "FIXED",
+        description: rule.description,
+        amount: rule.amount,
+        date: dateFormatted,
+        competence_month: month,
+        status: "SETTLED",
+        category_id: rule.category_id,
+        category_name: rule.category_name,
+      });
 
-    createdCount++;
+      createdCount++;
+    }
   }
 
   return { createdCount };
