@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import NewTransactionModal from "./NewTransactionModal";
 import NotificationDropdown from "./NotificationDropdown";
+import GlobalSearchModal from "./GlobalSearchModal";
 import { usePeriod } from "@/contexts/PeriodContext";
 
 interface HeaderProps {
@@ -16,6 +17,19 @@ export default function Header({ title }: HeaderProps) {
   const router = useRouter();
   const { monthLabel, prevMonth, nextMonth, viewMode, setViewMode, isCurrentMonth } = usePeriod();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  // Global shortcut for ⌘K or Ctrl+K
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setIsSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const isAnual   = pathname === "/ano";
   const isMensal  = !isAnual && viewMode !== "semanal";
@@ -98,18 +112,25 @@ export default function Header({ title }: HeaderProps) {
 
           {/* Right: Search + Notifications + New Transaction */}
           <div className="flex items-center gap-space-sm">
-            <div className="hidden lg:flex items-center gap-space-sm bg-surface-container-lowest px-space-md py-space-xs rounded-xl text-text-muted cursor-pointer hover:bg-surface-container transition-colors">
-              <span className="material-symbols-outlined text-base leading-none text-text-secondary">search</span>
-              <span className="text-body-md text-text-muted">Buscar lançamentos...</span>
-              <kbd className="text-label-sm bg-surface-card-elevated text-text-secondary px-space-xs py-space-2xs rounded text-center">⌘K</kbd>
-            </div>
+            <button
+              type="button"
+              onClick={() => setIsSearchOpen(true)}
+              aria-label="Abrir busca rápida (⌘K)"
+              className="flex items-center gap-space-sm bg-surface-container-lowest px-space-md py-space-xs rounded-xl text-text-muted cursor-pointer hover:bg-surface-container hover:text-text-primary transition-all border border-[rgba(255,255,255,0.05)]"
+            >
+              <span className="material-symbols-outlined text-base leading-none text-primary">search</span>
+              <span className="hidden sm:inline text-body-md text-text-muted">Buscar...</span>
+              <kbd className="hidden sm:inline-flex text-[11px] font-semibold bg-surface-card-elevated text-text-secondary px-space-xs py-0.5 rounded text-center border border-[rgba(255,255,255,0.06)] font-mono">
+                ⌘K
+              </kbd>
+            </button>
 
             {/* Notification Bell */}
             <NotificationDropdown />
 
             <button
               onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-space-xs bg-income-emerald hover:bg-income-emerald-hover text-white px-space-md py-space-xs rounded-xl text-headline-sm font-semibold transition-all shadow-glow active:scale-95"
+              className="flex items-center gap-space-xs bg-income-emerald hover:bg-income-emerald-hover text-white px-space-md py-space-xs rounded-xl text-headline-sm font-semibold transition-all shadow-glow active:scale-95 cursor-pointer"
               type="button"
               id="btn-novo-lancamento"
             >
@@ -123,6 +144,11 @@ export default function Header({ title }: HeaderProps) {
       <NewTransactionModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+      />
+
+      <GlobalSearchModal
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
       />
     </>
   );

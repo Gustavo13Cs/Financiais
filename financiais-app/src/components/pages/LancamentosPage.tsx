@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { useFinance } from "@/contexts/FinanceContext";
+import { Transaction } from "@/types/finance";
 import NewTransactionModal from "@/components/NewTransactionModal";
+import EditTransactionModal from "@/components/EditTransactionModal";
 import ImportModal from "@/components/ImportModal";
 
 const savedFilters = [
@@ -18,6 +20,7 @@ export default function LancamentosPage() {
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -279,8 +282,18 @@ export default function LancamentosPage() {
                       <td className="py-space-sm px-space-lg text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-space-2xs opacity-70 group-hover:opacity-100 transition-opacity">
                           <button
+                            onClick={() => setEditingTx(t)}
+                            aria-label="Editar"
+                            title="Editar lançamento"
+                            className="text-text-muted hover:text-primary p-space-2xs rounded-lg hover:bg-primary/10 transition-colors"
+                            type="button"
+                          >
+                            <span className="material-symbols-outlined text-base leading-none">edit</span>
+                          </button>
+                          <button
                             onClick={() => deleteTransaction(t.id)}
                             aria-label="Excluir"
+                            title="Excluir lançamento"
                             className="text-text-muted hover:text-expense-rose p-space-2xs rounded-lg hover:bg-expense-rose/10 transition-colors"
                             type="button"
                           >
@@ -307,6 +320,11 @@ export default function LancamentosPage() {
       </div>
 
       <NewTransactionModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <EditTransactionModal
+        isOpen={!!editingTx}
+        transaction={editingTx}
+        onClose={() => setEditingTx(null)}
+      />
       <ImportModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} />
     </div>
   );
