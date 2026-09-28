@@ -31,7 +31,7 @@ export default function LancamentosPage() {
     const matchFilter =
       !activeFilter ||
       (activeFilter === "extra" && t.nature === "EXTRA") ||
-      (activeFilter === "gasto" && t.kind === "EXPENSE") ||
+      (activeFilter === "gasto" && (t.kind === "EXPENSE" || t.kind === "GOAL_CONTRIBUTION")) ||
       (activeFilter === "entrada" && t.kind === "INCOME") ||
       (activeFilter === "pendente" && t.status === "PENDING");
 
@@ -255,7 +255,13 @@ export default function LancamentosPage() {
                         </span>
                       </td>
                       <td className="py-space-sm px-space-md whitespace-nowrap text-label-sm text-text-secondary">
-                        {isExtra ? "Entrada Extra" : isExpense ? "Gasto" : "Entrada Fixa"}
+                        {t.kind === "GOAL_CONTRIBUTION"
+                          ? "Aporte Meta"
+                          : isExtra
+                          ? "Entrada Extra"
+                          : isExpense
+                          ? t.nature === "FIXED" ? "Gasto Fixo" : "Gasto Variável"
+                          : t.nature === "FIXED" ? "Entrada Fixa" : "Entrada Variável"}
                       </td>
                       <td className={`py-space-sm px-space-md text-table-data-currency font-bold text-right whitespace-nowrap tabular-nums ${
                         !isExpense ? (isExtra ? "text-extra-violet" : "text-income-emerald") : "text-expense-rose"

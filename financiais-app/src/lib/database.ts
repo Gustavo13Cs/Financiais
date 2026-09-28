@@ -101,10 +101,15 @@ export async function fetchTransactions(): Promise<Transaction[]> {
       const { data, error } = await query;
 
       if (!error && Array.isArray(data)) {
-        return data.map((d: any) => ({
+        const result = data.map((d: any) => ({
           ...d,
           category_name: d.categories?.name || undefined,
         }));
+        // Keep localStorage in sync with Supabase
+        if (typeof window !== "undefined") {
+          localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(result));
+        }
+        return result;
       }
     } catch (e) {
       console.warn("Supabase fetch failed, falling back to local storage", e);
@@ -144,8 +149,23 @@ export async function saveTransaction(t: Omit<Transaction, "id"> & { id?: string
     } catch (e) {
       console.warn("Supabase save failed", e);
     }
+    // When Supabase is configured, realtime subscription or explicit refresh
+    // will keep the UI in sync. Only update localStorage as a cache.
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
+        const list: Transaction[] = saved ? JSON.parse(saved) : [];
+        const existingIndex = list.findIndex((item) => item.id === newTx.id);
+        const updated = existingIndex >= 0
+          ? list.map((item) => item.id === newTx.id ? newTx : item)
+          : [newTx, ...list];
+        localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(updated));
+      } catch {}
+    }
+    return newTx;
   }
 
+  // Local-only mode: read-modify-write localStorage
   if (typeof window !== "undefined") {
     const list = await fetchTransactions();
     const existingIndex = list.findIndex((item) => item.id === newTx.id);
@@ -169,6 +189,17 @@ export async function removeTransaction(id: string): Promise<void> {
     } catch (e) {
       console.warn("Supabase delete failed", e);
     }
+    // Update localStorage cache directly without refetching
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
+        if (saved) {
+          const list: Transaction[] = JSON.parse(saved);
+          localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(list.filter((item) => item.id !== id)));
+        }
+      } catch {}
+    }
+    return;
   }
 
   if (typeof window !== "undefined") {
@@ -177,6 +208,7 @@ export async function removeTransaction(id: string): Promise<void> {
     localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(filtered));
   }
 }
+
 
 export async function fetchCategories(): Promise<Category[]> {
   const userId = await getAuthUserId();
