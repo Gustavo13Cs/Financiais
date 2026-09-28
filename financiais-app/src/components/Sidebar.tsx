@@ -15,9 +15,12 @@ const navItems: NavItem[] = [
   { label: "Mês", href: "/mes", icon: "calendar_view_month" },
   { label: "Ano", href: "/ano", icon: "date_range" },
   { label: "Lançamentos", href: "/lancamentos", icon: "receipt_long" },
+  { label: "Calendário", href: "/calendario", icon: "calendar_month" },
+  { label: "Fluxo de Caixa", href: "/fluxo", icon: "show_chart" },
   { label: "Categorias", href: "/categorias", icon: "category" },
   { label: "Metas e Reservas", href: "/metas", icon: "savings" },
 ];
+
 
 export default function Sidebar() {
   const pathname = usePathname();

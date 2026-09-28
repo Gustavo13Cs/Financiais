@@ -611,52 +611,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Budget Progress (only rendered if user has any category budget configured) */}
-      {budgetedCategories.length > 0 && (
-        <div className="rounded-2xl bg-surface-card p-space-lg shadow-card border border-[rgba(255,255,255,0.05)]">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-xs pb-space-md">
-            <div>
-              <h2 className="text-headline-sm font-semibold text-text-primary">Limites de Orçamento Mensal</h2>
-              <span className="text-body-md text-text-secondary">Acompanhamento de tetos estabelecidos para o mês</span>
-            </div>
-            <span className="text-label-sm text-text-muted">
-              {budgetedCategories.length} {budgetedCategories.length === 1 ? "categoria ativa" : "categorias ativas"}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-space-lg">
-            {budgetedCategories.slice(0, 3).map((b) => (
-              <div key={b.id} className="rounded-2xl bg-surface-container-lowest p-space-md flex flex-col justify-between">
-                <div className="flex items-center justify-between mb-space-xs">
-                  <div className="flex items-center gap-space-xs">
-                    <span className={`material-symbols-outlined text-base ${b.warn ? "text-warning-amber" : "text-income-emerald"}`}>
-                      {b.icon}
-                    </span>
-                    <span className="text-body-md text-text-primary font-semibold">{b.label}</span>
-                  </div>
-                  <span className={`text-label-sm font-bold ${b.warn ? "text-warning-amber" : "text-income-emerald"}`}>
-                    {b.pct}%
-                  </span>
-                </div>
-                <div className="w-full bg-surface-container-high rounded-full h-2 overflow-hidden my-space-xs">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${b.warn ? "bg-warning-amber" : "bg-income-emerald"}`}
-                    style={{ width: `${Math.min(b.pct, 100)}%` }}
-                  />
-                </div>
-                <div className="flex items-center justify-between text-label-sm text-text-secondary mt-space-2xs">
-                  <span>Gasto: <strong className="text-text-primary tabular-nums">{fmt(b.spent)}</strong></span>
-                  <span>Teto: {fmt(b.limit)}</span>
-                </div>
-                <span className={`text-label-sm mt-space-xs flex items-center gap-space-2xs ${b.warn ? "text-warning-amber" : "text-income-emerald"}`}>
-                  <span className="material-symbols-outlined text-xs">{b.warn ? "warning" : "check_circle"}</span>
-                  {b.remaining >= 0 ? `Restam ${fmt(b.remaining)}` : `Excedeu ${fmt(Math.abs(b.remaining))}`}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Recent Transactions */}
       <div className="rounded-2xl bg-surface-card shadow-card border border-[rgba(255,255,255,0.05)] overflow-hidden">
